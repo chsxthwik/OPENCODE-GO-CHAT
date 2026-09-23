@@ -77,7 +77,7 @@ private fun parseBlocks(md: String): List<Block> {
                 i--
                 out += Block.Quote(q.toString().trim())
             }
-            line.trimStart().matches(Regex("^([-*+] )|(\\d+[.)] ).*")) -> {
+            line.trimStart().matches(Regex("^([-*+] .+)|(\\d+[.)] .+)")) -> {
                 flushPara()
                 val trimmed = line.trimStart()
                 val m = Regex("^(\\d+)[.)] ").find(trimmed)
@@ -130,40 +130,41 @@ private fun inline(text: String): AnnotatedString = buildAnnotatedString {
 
 private fun AnnotatedString.Builder.appendStyled(s: String) {
     var i = 0
-    fun emitPlain(end: Int) { if (end > i) append(s.substring(i, end)) }
+    var seg = 0
+    fun emitPlain() { if (i > seg) append(s.substring(seg, i)) }
     while (i < s.length) {
         when {
             s.startsWith("**", i) -> {
                 val end = s.indexOf("**", i + 2)
                 if (end > i + 2) {
-                    emitPlain(i)
+                    emitPlain()
                     withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.substring(i + 2, end)) }
-                    i = end + 2
+                    i = end + 2; seg = i
                 } else i++
             }
             s.startsWith("`", i) -> {
                 val end = s.indexOf("`", i + 1)
                 if (end > i) {
-                    emitPlain(i)
+                    emitPlain()
                     withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = GoColors.Surface2, fontSize = 13.sp)) {
                         append(" ${s.substring(i + 1, end)} ")
                     }
-                    i = end + 1
+                    i = end + 1; seg = i
                 } else i++
             }
             s.startsWith("*", i) || s.startsWith("_", i) -> {
                 val ch = s[i]
                 val end = s.indexOf(ch, i + 1)
                 if (end > i + 1) {
-                    emitPlain(i)
+                    emitPlain()
                     withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(s.substring(i + 1, end)) }
-                    i = end + 1
+                    i = end + 1; seg = i
                 } else i++
             }
             else -> i++
         }
     }
-    emitPlain(s.length)
+    if (s.length > seg) append(s.substring(seg))
 }
 
 private fun tintCode(code: String): AnnotatedString = buildAnnotatedString {

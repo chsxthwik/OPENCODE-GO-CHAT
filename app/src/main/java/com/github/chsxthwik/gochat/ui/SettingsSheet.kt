@@ -9,11 +9,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.github.chsxthwik.gochat.UiState
 import com.github.chsxthwik.gochat.ui.theme.GoColors
+import com.github.chsxthwik.gochat.ui.theme.GoType
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,7 +50,7 @@ fun SettingsSheet(
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Temperature", style = MaterialTheme.typography.labelMedium, color = GoColors.TextDim, modifier = Modifier.weight(1f))
-                Text("%.2f".format(ui.temperature), fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = GoColors.Accent)
+                Text("%.2f".format(ui.temperature), style = GoType.MonoDim.copy(color = GoColors.Accent))
             }
             Slider(
                 value = ui.temperature,
@@ -64,7 +63,7 @@ fun SettingsSheet(
             Spacer(Modifier.height(18.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("Context messages", style = MaterialTheme.typography.labelMedium, color = GoColors.TextDim, modifier = Modifier.weight(1f))
-                Text("${ui.contextLimit}", fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = GoColors.Accent)
+                Text("${ui.contextLimit}", style = GoType.MonoDim.copy(color = GoColors.Accent))
             }
             Slider(
                 value = ui.contextLimit.toFloat(),
@@ -85,7 +84,7 @@ fun SettingsSheet(
             }
 
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = GoColors.GlassBorder)
+            HorizontalDivider(color = GoColors.Line)
             Spacer(Modifier.height(8.dp))
             var confirmDisconnect by remember { mutableStateOf(false) }
             TextButton(onClick = { confirmDisconnect = true }, modifier = Modifier.fillMaxWidth()) {

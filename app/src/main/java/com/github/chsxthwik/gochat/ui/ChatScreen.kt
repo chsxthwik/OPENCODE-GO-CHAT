@@ -45,8 +45,6 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,12 +53,15 @@ import com.github.chsxthwik.gochat.ChatViewModel
 import com.github.chsxthwik.gochat.UiState
 import com.github.chsxthwik.gochat.data.*
 import com.github.chsxthwik.gochat.ui.theme.GoColors
+import com.github.chsxthwik.gochat.ui.theme.GoType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private val ATTACHMENT_JSON = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
 private val SUGGESTIONS = listOf(
     "Explain this codebase structure",
@@ -198,14 +199,14 @@ fun ChatScreen(
             }
         }
         AnimatedVisibility(visible = topScrolled) {
-            HorizontalDivider(color = GoColors.GlassBorder)
+            HorizontalDivider(color = GoColors.Line)
         }
         AnimatedVisibility(visible = ui.offline) {
             Row(
-                Modifier.fillMaxWidth().background(GoColors.Surface2).padding(vertical = 5.dp),
+                Modifier.fillMaxWidth().background(GoColors.WarnSoft).padding(vertical = 5.dp),
                 horizontalArrangement = Arrangement.Center,
             ) {
-                Text("offline — replies will wait for a connection", fontSize = 11.sp, color = GoColors.TextDim)
+                Text("offline — replies will wait for a connection", style = GoType.Caption.copy(color = GoColors.Warn))
             }
         }
 
@@ -253,7 +254,7 @@ fun ChatScreen(
                 SmallFloatingActionButton(
                     onClick = { scope.launch { listState.animateScrollToItem(ui.messages.size - 1) } },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(36.dp),
-                    containerColor = GoColors.Surface2,
+                    containerColor = GoColors.SurfaceHigh,
                     contentColor = GoColors.Accent,
                 ) { Icon(Icons.Default.KeyboardArrowDown, "latest") }
             }
@@ -268,8 +269,8 @@ fun ChatScreen(
                 attachments.forEachIndexed { i, a ->
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = GoColors.Surface2,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.GlassBorder),
+                        color = GoColors.SurfaceHigh,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.Line),
                     ) {
                         Row(Modifier.padding(start = 10.dp, top = 6.dp, bottom = 6.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(
@@ -277,7 +278,7 @@ fun ChatScreen(
                                 null, tint = GoColors.Accent, modifier = Modifier.size(14.dp),
                             )
                             Spacer(Modifier.width(6.dp))
-                            Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = GoColors.TextDim, modifier = Modifier.widthIn(max = 140.dp))
+                            Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = GoType.MonoDim, modifier = Modifier.widthIn(max = 140.dp))
                             IconButton(onClick = { attachments = attachments.toMutableList().also { it.removeAt(i) } }, modifier = Modifier.minimumInteractiveComponentSize().size(24.dp)) {
                                 Icon(Icons.Default.Close, "remove", tint = GoColors.TextFaint, modifier = Modifier.size(13.dp))
                             }
@@ -292,7 +293,7 @@ fun ChatScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             shape = RoundedCornerShape(18.dp),
             color = GoColors.Surface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.GlassBorder),
+            border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.Line),
         ) {
             Row(Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
                 IconButton(onClick = {
@@ -322,7 +323,7 @@ fun ChatScreen(
                     placeholder = {
                         Text(
                             if (ui.agentMode) "Describe the task…" else "Message ${ui.model}",
-                            color = GoColors.TextFaint, fontSize = 14.5.sp,
+                            style = GoType.Body.copy(color = GoColors.TextFaint),
                         )
                     },
                     shape = RoundedCornerShape(12.dp),
@@ -338,7 +339,7 @@ fun ChatScreen(
                     FilledIconButton(
                         onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); vm.stop() },
                         modifier = Modifier.size(42.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = GoColors.Surface2),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = GoColors.SurfaceHigh),
                     ) { Icon(Icons.Default.Stop, "stop", tint = GoColors.Error, modifier = Modifier.size(18.dp)) }
                 } else {
                     FilledIconButton(
@@ -353,7 +354,7 @@ fun ChatScreen(
                         modifier = Modifier.size(42.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = GoColors.Accent,
-                            disabledContainerColor = GoColors.Surface2,
+                            disabledContainerColor = GoColors.SurfaceHigh,
                         ),
                     ) {
                         Icon(
@@ -377,7 +378,7 @@ fun ChatScreen(
         Snackbar(
             data,
             shape = RoundedCornerShape(12.dp),
-            containerColor = GoColors.Surface2,
+            containerColor = GoColors.SurfaceHigh,
             contentColor = GoColors.Text,
             actionColor = GoColors.Accent,
         )
@@ -397,13 +398,13 @@ fun ChatScreen(
                     value = q,
                     onValueChange = { q = it },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    placeholder = { Text("Search ${ui.models.size} models", color = GoColors.TextFaint, fontSize = 14.sp) },
+                    placeholder = { Text("Search ${ui.models.size} models", style = GoType.BodyDim.copy(color = GoColors.TextFaint)) },
                     leadingIcon = { Icon(Icons.Default.Search, null, tint = GoColors.TextFaint, modifier = Modifier.size(18.dp)) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GoColors.Accent.copy(alpha = 0.5f),
-                        unfocusedBorderColor = GoColors.GlassBorder,
+                        unfocusedBorderColor = GoColors.Line,
                     ),
                 )
                 Spacer(Modifier.height(8.dp))
@@ -430,7 +431,7 @@ fun ChatScreen(
                                     .padding(horizontal = 20.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(m.id, fontFamily = FontFamily.Monospace, fontSize = 13.5.sp, color = GoColors.Text, modifier = Modifier.weight(1f))
+                                Text(m.id, style = GoType.Mono, modifier = Modifier.weight(1f))
                                 if (m.vision) Text("vision", style = MaterialTheme.typography.labelSmall, color = GoColors.TextFaint)
                                 if (m.id == ui.model) Icon(Icons.Default.Check, null, tint = GoColors.Accent, modifier = Modifier.size(16.dp))
                             }
@@ -502,7 +503,7 @@ private fun ActionItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     ) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(14.dp))
-        Text(label, color = tint, fontSize = 14.5.sp)
+        Text(label, style = GoType.TitleSmall.copy(color = tint))
     }
 }
 
@@ -538,15 +539,20 @@ private fun MessageRow(
                             )
                         )
                         .background(GoColors.UserBubble)
-                        .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(16.dp))
+                        .border(
+                            1.dp, GoColors.Line,
+                            RoundedCornerShape(
+                                topStart = 16.dp, topEnd = 16.dp,
+                                bottomStart = 16.dp, bottomEnd = 4.dp,
+                            )
+                        )
                         .combinedClickable(onClick = {}, onLongClick = onActions)
                         .semantics { contentDescription = "Your message" }
                         .padding(horizontal = 13.dp, vertical = 10.dp),
                 ) {
                     val atts = remember(m.attachmentsJson) {
                         runCatching {
-                            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                                .decodeFromString<List<Attachment>>(m.attachmentsJson)
+                            ATTACHMENT_JSON.decodeFromString<List<Attachment>>(m.attachmentsJson)
                         }.getOrDefault(emptyList())
                     }
                     atts.forEach { a ->
@@ -556,7 +562,7 @@ private fun MessageRow(
                                 null, tint = GoColors.Accent, modifier = Modifier.size(13.dp),
                             )
                             Spacer(Modifier.width(5.dp))
-                            Text(a.name, fontSize = 12.sp, color = GoColors.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(a.name, style = GoType.MonoDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     if (m.content.isNotBlank()) {
@@ -653,7 +659,7 @@ private fun RetryChip(label: String, onRetry: () -> Unit) {
         Modifier
             .padding(top = 8.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(GoColors.Surface2)
+            .background(GoColors.SurfaceHigh)
             .clickable(onClick = onRetry)
             .semantics { role = Role.Button }
             .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -661,7 +667,7 @@ private fun RetryChip(label: String, onRetry: () -> Unit) {
     ) {
         Icon(Icons.Default.Refresh, null, tint = GoColors.Accent, modifier = Modifier.size(12.dp))
         Spacer(Modifier.width(5.dp))
-        Text(label, fontSize = 11.sp, color = GoColors.Accent, fontFamily = FontFamily.Monospace)
+        Text(label, style = GoType.Caption.copy(color = GoColors.Accent))
     }
 }
 
@@ -704,7 +710,7 @@ private fun EmptyState(onSuggest: (String) -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(">_", color = GoColors.Accent, fontFamily = FontFamily.Monospace, fontSize = 34.sp, fontWeight = FontWeight.Bold)
+        Text(">_", style = GoType.Mark.copy(fontSize = 34.sp))
         Spacer(Modifier.height(12.dp))
         Text("Ask anything.", style = MaterialTheme.typography.titleMedium)
         Text("Real answers, streamed.", style = MaterialTheme.typography.bodyMedium, color = GoColors.TextDim)
@@ -715,7 +721,7 @@ private fun EmptyState(onSuggest: (String) -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 shape = RoundedCornerShape(12.dp),
                 color = GoColors.Surface,
-                border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.GlassBorder),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.Line),
             ) {
                 Text(
                     s, modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

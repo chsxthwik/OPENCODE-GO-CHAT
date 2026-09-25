@@ -14,8 +14,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -28,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.chsxthwik.gochat.UiState
 import com.github.chsxthwik.gochat.ui.theme.GoColors
+import com.github.chsxthwik.gochat.ui.theme.GoType
 
 @Composable
 fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
@@ -44,13 +43,13 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
             Modifier
                 .size(72.dp)
                 .background(GoColors.Surface, RoundedCornerShape(20.dp))
-                .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(20.dp)),
+                .border(1.dp, GoColors.Line, RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            Text(">_", color = GoColors.Accent, fontFamily = FontFamily.Monospace, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text(">_", style = GoType.Mark)
         }
         Spacer(Modifier.height(20.dp))
-        Text("GoChat", style = MaterialTheme.typography.titleLarge, fontSize = 26.sp)
+        Text("GoChat", style = GoType.Display)
         Spacer(Modifier.height(6.dp))
         Text(
             "Chat with every OpenCode Go model.\nOne key, forty models, on-device only.",
@@ -64,7 +63,7 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
             value = key,
             onValueChange = { key = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Paste your Go API key", color = GoColors.TextFaint, fontFamily = FontFamily.Monospace) },
+            placeholder = { Text("Paste your Go API key", style = GoType.Mono.copy(color = GoColors.TextFaint)) },
             leadingIcon = { Icon(Icons.Default.Key, null, tint = GoColors.TextDim) },
             trailingIcon = {
                 IconButton(onClick = { reveal = !reveal }) {
@@ -79,7 +78,7 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoColors.Accent,
-                unfocusedBorderColor = GoColors.GlassBorder,
+                unfocusedBorderColor = GoColors.Line,
                 cursorColor = GoColors.Accent,
             ),
             keyboardOptions = KeyboardOptions(
@@ -105,10 +104,10 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
             enabled = key.isNotBlank() && !ui.connecting,
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = GoColors.Accent, contentColor = GoColors.Bg),
+            colors = ButtonDefaults.buttonColors(containerColor = GoColors.Accent, contentColor = GoColors.OnAccent),
         ) {
-            if (ui.connecting) CircularProgressIndicator(Modifier.size(20.dp), color = GoColors.Bg, strokeWidth = 2.dp)
-            else Text("Connect", fontWeight = FontWeight.SemiBold)
+            if (ui.connecting) CircularProgressIndicator(Modifier.size(20.dp), color = GoColors.OnAccent, strokeWidth = 2.dp)
+            else Text("Connect", style = GoType.TitleSmall.copy(color = GoColors.OnAccent))
         }
 
         Spacer(Modifier.height(16.dp))

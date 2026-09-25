@@ -349,7 +349,7 @@ fun ChatScreen(
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = { renameDialog = false }) { Text("Cancel") }
                             TextButton(
-                                onClick = { vm.renameChat(renameText); renameDialog = false },
+                                onClick = { ui.currentId?.let { vm.renameChat(it, renameText) }; renameDialog = false },
                                 enabled = renameText.isNotBlank(),
                             ) { Text("Save") }
                         }

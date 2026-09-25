@@ -170,7 +170,7 @@ class ChatViewModel(
                             messages = msgs,
                             earlierCount = (total - msgs.size).coerceAtLeast(0),
                             contextDropped = dropped,
-                            contextTokens = ContextBudget.estimateTokens(window, repo::parseAttachments),
+                            contextTokens = ContextBudget.estimateTokens(window, ::parseAttachments),
                         )
                     }
                 }
@@ -225,13 +225,6 @@ class ChatViewModel(
     fun setChatSystemPrompt(prompt: String) {
         val id = _ui.value.currentId ?: return
         viewModelScope.launch { repo.setConversationPrompt(id, prompt.trim()) }
-    }
-
-    fun renameChat(title: String) {
-        val id = _ui.value.currentId ?: return
-        val t = title.trim()
-        if (t.isEmpty()) return
-        viewModelScope.launch { repo.renameConversation(id, t) }
     }
 
     private var lastDeleted: ConversationSnapshot? = null
@@ -322,7 +315,7 @@ class ChatViewModel(
                     requestMessageId = reqMsg.id,
                     assistantMessageId = assistantId,
                     requestText = reqMsg.content,
-                    attachments = repo.parseAttachments(reqMsg.attachmentsJson),
+                    attachments = parseAttachments(reqMsg.attachmentsJson),
                     history = history,
                     model = model,
                     apiKey = key,
@@ -433,7 +426,7 @@ class ChatViewModel(
             when (m.role) {
                 Role.USER.wire -> WireMessage(
                     "user", m.content,
-                    if (goModel.vision) repo.parseAttachments(m.attachmentsJson).mapNotNull { it.imageBase64 } else emptyList(),
+                    if (goModel.vision) parseAttachments(m.attachmentsJson).mapNotNull { it.imageBase64 } else emptyList(),
                 )
                 Role.ASSISTANT.wire -> if (m.content.isNotBlank()) WireMessage("assistant", m.content) else null
                 else -> null
@@ -483,7 +476,7 @@ class ChatViewModel(
     fun exportChat(convId: String, onReady: (String) -> Unit) {
         viewModelScope.launch {
             val conv = repo.conversation(convId) ?: return@launch
-            onReady(repo.exportMarkdown(conv, repo.messagesOnce(convId)))
+            onReady(exportMarkdown(conv, repo.messagesOnce(convId)))
         }
     }
 

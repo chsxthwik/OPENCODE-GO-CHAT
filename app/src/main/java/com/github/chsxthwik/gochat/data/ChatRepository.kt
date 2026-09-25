@@ -146,25 +146,28 @@ class ChatRepository(private val db: ChatDatabase) {
     suspend fun upsertAgentTask(t: AgentTask) = dao.upsertAgentTask(t)
     suspend fun upsertAgentStep(s: AgentStep) = dao.upsertAgentStep(s)
 
-    fun parseAttachments(raw: String): List<Attachment> =
-        runCatching { json.decodeFromString<List<Attachment>>(raw) }.getOrDefault(emptyList())
+}
 
-    fun exportMarkdown(conv: Conversation, messages: List<MessageEntity>): String = buildString {
-        appendLine("# ${conv.title}")
-        appendLine("_GoChat · ${conv.model}_")
+private val transcriptJson = Json { ignoreUnknownKeys = true }
+
+internal fun parseAttachments(raw: String): List<Attachment> =
+    runCatching { transcriptJson.decodeFromString<List<Attachment>>(raw) }.getOrDefault(emptyList())
+
+internal fun exportMarkdown(conv: Conversation, messages: List<MessageEntity>): String = buildString {
+    appendLine("# ${conv.title}")
+    appendLine("_GoChat · ${conv.model}_")
+    appendLine()
+    messages.forEach { m ->
+        val who = if (m.role == "user") "**You**" else "**${m.model.ifBlank { conv.model }}**"
+        appendLine("$who:")
         appendLine()
-        messages.forEach { m ->
-            val who = if (m.role == "user") "**You**" else "**${m.model.ifBlank { conv.model }}**"
-            appendLine("$who:")
+        parseAttachments(m.attachmentsJson).forEach { a ->
+            a.text?.let { appendLine("```\n// ${a.name}\n$it\n```") }
+            if (a.imageBase64 != null) appendLine("_[image: ${a.name}]_")
+        }
+        if (m.content.isNotBlank()) {
+            appendLine(m.content)
             appendLine()
-            parseAttachments(m.attachmentsJson).forEach { a ->
-                a.text?.let { appendLine("```\n// ${a.name}\n$it\n```") }
-                if (a.imageBase64 != null) appendLine("_[image: ${a.name}]_")
-            }
-            if (m.content.isNotBlank()) {
-                appendLine(m.content)
-                appendLine()
-            }
         }
     }
 }

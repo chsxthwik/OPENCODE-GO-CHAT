@@ -9,7 +9,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,7 +35,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +69,7 @@ private val SUGGESTIONS = listOf(
     "Draft a clean README section",
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     ui: UiState,
@@ -81,6 +91,9 @@ fun ChatScreen(
     val conv = ui.conversations.find { it.id == ui.currentId }
     val streaming = ui.sending
     val keyboard = LocalSoftwareKeyboardController.current
+    val haptic = LocalHapticFeedback.current
+    val snack = remember { SnackbarHostState() }
+    fun toast(msg: String) = scope.launch { snack.showSnackbar(msg) }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -124,7 +137,8 @@ fun ChatScreen(
             listState.animateScrollToItem(ui.messages.size - 1)
     }
 
-    Column(Modifier.fillMaxSize().background(GoColors.Bg).imePadding()) {
+    Box(Modifier.fillMaxSize().background(GoColors.Bg)) {
+    Column(Modifier.fillMaxSize().imePadding()) {
         // ── top bar ──────────────────────────────────────────────
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp),
@@ -167,6 +181,15 @@ fun ChatScreen(
             }
         }
 
+        val topScrolled by remember {
+            derivedStateOf {
+                listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
+            }
+        }
+        AnimatedVisibility(visible = topScrolled) {
+            HorizontalDivider(color = GoColors.GlassBorder)
+        }
+
         // ── messages ─────────────────────────────────────────────
         Box(Modifier.weight(1f)) {
             if (ui.messages.isEmpty() && !streaming) {
@@ -179,13 +202,16 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(ui.messages, key = { it.id }) { m ->
-                        MessageRow(
-                            m = m,
-                            isStreaming = m.id == ui.streamingId,
-                            streamText = if (m.id == ui.streamingId) ui.streamingText else "",
-                            onActions = { actionsFor = m },
-                            onRetry = { vm.regenerate(m.id) },
-                        )
+                        Box(Modifier.animateItem()) {
+                            MessageRow(
+                                m = m,
+                                isStreaming = m.id == ui.streamingId,
+                                streamText = if (m.id == ui.streamingId) ui.streamingText else "",
+                                onActions = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); actionsFor = m },
+                                onRetry = { vm.regenerate(m.id) },
+                                onCopied = { toast("Copied") },
+                            )
+                        }
                     }
                     if (ui.thinking) item { ThinkingDots() }
                 }
@@ -226,7 +252,7 @@ fun ChatScreen(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(a.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, color = GoColors.TextDim, modifier = Modifier.widthIn(max = 140.dp))
-                            IconButton(onClick = { attachments = attachments.toMutableList().also { it.removeAt(i) } }, modifier = Modifier.size(22.dp)) {
+                            IconButton(onClick = { attachments = attachments.toMutableList().also { it.removeAt(i) } }, modifier = Modifier.minimumInteractiveComponentSize().size(24.dp)) {
                                 Icon(Icons.Default.Close, "remove", tint = GoColors.TextFaint, modifier = Modifier.size(13.dp))
                             }
                         }
@@ -268,7 +294,7 @@ fun ChatScreen(
                 Spacer(Modifier.width(4.dp))
                 if (streaming) {
                     FilledIconButton(
-                        onClick = { vm.stop() },
+                        onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); vm.stop() },
                         modifier = Modifier.size(42.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = GoColors.Surface2),
                     ) { Icon(Icons.Default.Stop, "stop", tint = GoColors.Error, modifier = Modifier.size(18.dp)) }
@@ -276,6 +302,7 @@ fun ChatScreen(
                     FilledIconButton(
                         onClick = {
                             if (input.isNotBlank() || attachments.isNotEmpty()) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 vm.send(input, attachments)
                                 input = ""; attachments = emptyList(); keyboard?.hide()
                             }
@@ -298,6 +325,23 @@ fun ChatScreen(
         }
     }
 
+    SnackbarHost(
+        hostState = snack,
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .imePadding()
+            .padding(bottom = 76.dp, start = 16.dp, end = 16.dp),
+    ) { data ->
+        Snackbar(
+            data,
+            shape = RoundedCornerShape(12.dp),
+            containerColor = GoColors.Surface2,
+            contentColor = GoColors.Text,
+            actionColor = GoColors.Accent,
+        )
+    }
+    }
+
     // ── model picker ─────────────────────────────────────────────
     if (modelSheet) {
         ModalBottomSheet(onDismissRequest = { modelSheet = false }, containerColor = GoColors.Surface) {
@@ -306,7 +350,24 @@ fun ChatScreen(
                     "Models", style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
-                val groups = ui.models.groupBy { it.id.substringBefore('-') }
+                var q by remember(modelSheet) { mutableStateOf("") }
+                OutlinedTextField(
+                    value = q,
+                    onValueChange = { q = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    placeholder = { Text("Search ${ui.models.size} models", color = GoColors.TextFaint, fontSize = 14.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, null, tint = GoColors.TextFaint, modifier = Modifier.size(18.dp)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoColors.Accent.copy(alpha = 0.5f),
+                        unfocusedBorderColor = GoColors.GlassBorder,
+                    ),
+                )
+                Spacer(Modifier.height(8.dp))
+                val groups = ui.models
+                    .filter { q.isBlank() || it.id.contains(q.trim(), ignoreCase = true) }
+                    .groupBy { it.id.substringBefore('-') }
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     groups.forEach { (family, models) ->
                         item {
@@ -320,7 +381,10 @@ fun ChatScreen(
                             Row(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { vm.selectModel(m.id); modelSheet = false }
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        vm.selectModel(m.id); modelSheet = false
+                                    }
                                     .padding(horizontal = 20.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -342,7 +406,7 @@ fun ChatScreen(
         ModalBottomSheet(onDismissRequest = { actionsFor = null }, containerColor = GoColors.Surface) {
             Column(Modifier.padding(bottom = 28.dp)) {
                 ActionItem(Icons.Default.ContentCopy, "Copy text") {
-                    clipboard.setText(AnnotatedString(m.content)); actionsFor = null
+                    clipboard.setText(AnnotatedString(m.content)); actionsFor = null; toast("Copied")
                 }
                 ActionItem(Icons.Default.Share, "Share") {
                     val send = Intent(Intent.ACTION_SEND).apply {
@@ -400,6 +464,7 @@ private fun ActionItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageRow(
     m: MessageEntity,
@@ -407,33 +472,34 @@ private fun MessageRow(
     streamText: String,
     onActions: () -> Unit,
     onRetry: () -> Unit,
+    onCopied: () -> Unit,
 ) {
     val isUser = m.role == "user"
+    val clipboard = LocalClipboardManager.current
     Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
-        ) {
-            Column(
-                Modifier
-                    .widthIn(max = 330.dp)
-                    .clip(
-                        RoundedCornerShape(
-                            topStart = 16.dp, topEnd = 16.dp,
-                            bottomStart = if (isUser) 16.dp else 4.dp,
-                            bottomEnd = if (isUser) 4.dp else 16.dp,
+        if (isUser) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Column(
+                    Modifier
+                        .widthIn(max = 330.dp)
+                        .clip(
+                            RoundedCornerShape(
+                                topStart = 16.dp, topEnd = 16.dp,
+                                bottomStart = 16.dp, bottomEnd = 4.dp,
+                            )
                         )
-                    )
-                    .background(if (isUser) GoColors.UserBubble else GoColors.Surface)
-                    .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(16.dp))
-                    .clickable(onClick = onActions)
-                    .padding(horizontal = 13.dp, vertical = 10.dp),
-            ) {
-                if (isUser) {
-                    val atts = runCatching {
-                        kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-                            .decodeFromString<List<Attachment>>(m.attachmentsJson)
-                    }.getOrDefault(emptyList())
+                        .background(GoColors.UserBubble)
+                        .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(16.dp))
+                        .combinedClickable(onClick = {}, onLongClick = onActions)
+                        .semantics { contentDescription = "Your message" }
+                        .padding(horizontal = 13.dp, vertical = 10.dp),
+                ) {
+                    val atts = remember(m.attachmentsJson) {
+                        runCatching {
+                            kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                                .decodeFromString<List<Attachment>>(m.attachmentsJson)
+                        }.getOrDefault(emptyList())
+                    }
                     atts.forEach { a ->
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
                             Icon(
@@ -447,52 +513,104 @@ private fun MessageRow(
                     if (m.content.isNotBlank()) {
                         Text(m.content, style = MaterialTheme.typography.bodyLarge)
                     }
-                } else {
-                    when (m.status) {
-                        "ERROR" -> Text(
-                            "Message failed — tap ⋮ to retry",
+                }
+            }
+        } else {
+            // assistant: flat full-width reply, no card chrome
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(onClick = {}, onLongClick = onActions)
+                    .semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        contentDescription = "Assistant reply"
+                    }
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                when (m.status) {
+                    "ERROR" -> {
+                        Text(
+                            if (m.content.isBlank()) "Couldn't get a reply." else m.content,
                             color = GoColors.Error, style = MaterialTheme.typography.bodyMedium,
                         )
-                        else -> {
-                            val text = if (isStreaming) streamText else m.content
-                            if (text.isBlank() && isStreaming) ThinkingDots()
-                            else MarkdownText(text)
-                        }
+                        RetryChip("failed — tap to retry", onRetry)
                     }
-                    if (m.status == "INTERRUPTED") {
-                        Row(
-                            Modifier.padding(top = 8.dp).clip(RoundedCornerShape(8.dp))
-                                .background(GoColors.Surface2).clickable(onClick = onRetry)
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(Icons.Default.Refresh, null, tint = GoColors.Accent, modifier = Modifier.size(12.dp))
-                            Spacer(Modifier.width(5.dp))
-                            Text("stopped — tap to retry", fontSize = 11.sp, color = GoColors.Accent, fontFamily = FontFamily.Monospace)
+                    else -> {
+                        val text = if (isStreaming) streamText else m.content
+                        if (text.isBlank() && isStreaming) ThinkingDots()
+                        else MarkdownText(text, onCopied = { onCopied() })
+                        if (m.status == "INTERRUPTED") RetryChip("stopped — tap to retry", onRetry)
+                    }
+                }
+                if (!isStreaming && m.status != "ERROR") {
+                    Row(
+                        Modifier.padding(top = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        MetaAction(Icons.Default.ContentCopy, "Copy reply") {
+                            clipboard.setText(AnnotatedString(m.content)); onCopied()
                         }
+                        MetaAction(Icons.Default.Refresh, "Regenerate", onRetry)
+                        MetaAction(Icons.Default.MoreHoriz, "More actions", onActions)
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            buildString {
+                                append(formatStamp(m.createdAt))
+                                if (m.tokensOut > 0 || m.latencyMs > 0)
+                                    append("  ·  ${m.tokensOut} tok · ${"%.1f".format(m.latencyMs / 1000f)}s")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = GoColors.TextFaint,
+                        )
                     }
                 }
             }
         }
-        Row(
-            Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (isUser) Spacer(Modifier.weight(1f))
-            Text(
-                formatStamp(m.createdAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = GoColors.TextFaint,
-            )
-            if (!isUser && (m.tokensOut > 0 || m.latencyMs > 0)) {
+        if (isUser) {
+            Row(
+                Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(Modifier.weight(1f))
                 Text(
-                    "  ·  ${m.tokensOut} tok · ${"%.1f".format(m.latencyMs / 1000f)}s",
+                    formatStamp(m.createdAt),
                     style = MaterialTheme.typography.labelSmall,
                     color = GoColors.TextFaint,
                 )
             }
-            if (!isUser) Spacer(Modifier.weight(1f))
         }
+    }
+}
+
+@Composable
+private fun RetryChip(label: String, onRetry: () -> Unit) {
+    Row(
+        Modifier
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(GoColors.Surface2)
+            .clickable(onClick = onRetry)
+            .semantics { role = Role.Button }
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.Refresh, null, tint = GoColors.Accent, modifier = Modifier.size(12.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(label, fontSize = 11.sp, color = GoColors.Accent, fontFamily = FontFamily.Monospace)
+    }
+}
+
+@Composable
+private fun MetaAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.minimumInteractiveComponentSize().size(30.dp),
+    ) {
+        Icon(icon, label, tint = GoColors.TextFaint, modifier = Modifier.size(15.dp))
     }
 }
 

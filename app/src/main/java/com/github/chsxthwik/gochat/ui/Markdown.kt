@@ -15,6 +15,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -193,8 +195,12 @@ private fun tintCode(code: String): AnnotatedString = buildAnnotatedString {
 }
 
 @Composable
-fun MarkdownText(markdown: String, modifier: Modifier = Modifier) {
-    val blocks = parseBlocks(markdown)
+fun MarkdownText(
+    markdown: String,
+    modifier: Modifier = Modifier,
+    onCopied: (String) -> Unit = {},
+) {
+    val blocks = remember(markdown) { parseBlocks(markdown) }
     val uri = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -252,7 +258,10 @@ fun MarkdownText(markdown: String, modifier: Modifier = Modifier) {
                             color = GoColors.TextFaint,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = { clipboard.setText(AnnotatedString(b.code)) }, modifier = Modifier.size(28.dp)) {
+                        IconButton(
+                            onClick = { clipboard.setText(AnnotatedString(b.code)); onCopied("Code copied") },
+                            modifier = Modifier.minimumInteractiveComponentSize().size(30.dp),
+                        ) {
                             Icon(Icons.Default.ContentCopy, "copy code", tint = GoColors.TextDim, modifier = Modifier.size(15.dp))
                         }
                     }

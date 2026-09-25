@@ -87,10 +87,24 @@ fun SettingsSheet(
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = GoColors.GlassBorder)
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onDisconnect, modifier = Modifier.fillMaxWidth()) {
+            var confirmDisconnect by remember { mutableStateOf(false) }
+            TextButton(onClick = { confirmDisconnect = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Logout, null, tint = GoColors.Error, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Disconnect key", color = GoColors.Error)
+            }
+            if (confirmDisconnect) {
+                AlertDialog(
+                    onDismissRequest = { confirmDisconnect = false },
+                    title = { Text("Disconnect key?") },
+                    text = { Text("Your API key is removed from this device. Chats stay saved.", color = GoColors.TextDim) },
+                    confirmButton = {
+                        TextButton(onClick = { confirmDisconnect = false; onDisconnect() }) {
+                            Text("Disconnect", color = GoColors.Error)
+                        }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmDisconnect = false }) { Text("Cancel") } },
+                )
             }
         }
     }

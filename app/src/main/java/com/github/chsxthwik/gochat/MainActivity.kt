@@ -1,9 +1,15 @@
 package com.github.chsxthwik.gochat
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
@@ -12,18 +18,23 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.github.chsxthwik.gochat.data.ReplyNotifier
+import com.github.chsxthwik.gochat.data.Role
 import com.github.chsxthwik.gochat.ui.*
 import com.github.chsxthwik.gochat.ui.theme.GoChatTheme
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as GoChatApp
+        app.pendingConv.value = intent.getStringExtra(ReplyNotifier.EXTRA_CONVERSATION)
         setContent {
             GoChatTheme {
                 val vm: ChatViewModel = viewModel(factory = ChatViewModel.factory(app))
@@ -34,6 +45,32 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(ui.hasKey, ui.models.isEmpty()) {
                     if (ui.hasKey && ui.models.isEmpty()) vm.refreshModels()
+                }
+
+                LaunchedEffect(Unit) {
+                    app.pendingConv.collect { id ->
+                        if (id != null) {
+                            vm.openChat(id)
+                            app.pendingConv.value = null
+                        }
+                    }
+                }
+
+                // ask for the notification permission once, after the first send —
+                // never blocks chatting; replies just skip the banner if denied
+                var askedNotif by rememberSaveable { mutableStateOf(false) }
+                val notifPermission = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission(),
+                ) {}
+                LaunchedEffect(ui.messages.any { it.role == Role.USER.wire }) {
+                    if (!askedNotif &&
+                        ui.messages.any { it.role == Role.USER.wire } &&
+                        Build.VERSION.SDK_INT >= 33 &&
+                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        askedNotif = true
+                        notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
                 }
 
                 if (!ui.hasKey) {
@@ -90,5 +127,21 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        (application as GoChatApp).pendingConv.value =
+            intent.getStringExtra(ReplyNotifier.EXTRA_CONVERSATION)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        (application as GoChatApp).foreground = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        (application as GoChatApp).foreground = false
     }
 }

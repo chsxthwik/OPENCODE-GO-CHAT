@@ -629,6 +629,11 @@ fun ChatScreen(
                     actionsFor = null
                     scope.launch { delay(80); composerFocus.requestFocus(); keyboard?.show() }
                 }
+                if (m.status == "DONE") {
+                    ActionItem(Icons.Default.CallSplit, "Fork from here") {
+                        vm.forkFrom(m.id); actionsFor = null
+                    }
+                }
                 if (m.role == "user") {
                     ActionItem(Icons.Default.Edit, "Edit & resend") {
                         editing = m; editText = m.content; actionsFor = null

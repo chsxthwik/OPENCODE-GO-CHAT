@@ -239,6 +239,13 @@ class ChatViewModel(
         viewModelScope.launch { repo.restoreConversation(s) }
     }
 
+    fun forkFrom(messageId: String) {
+        val convId = _ui.value.currentId ?: return
+        viewModelScope.launch {
+            repo.forkConversation(convId, messageId)?.let { openChat(it) }
+        }
+    }
+
     fun renameChat(id: String, title: String) =
         viewModelScope.launch { repo.renameConversation(id, title.trim().ifBlank { "New chat" }) }
 

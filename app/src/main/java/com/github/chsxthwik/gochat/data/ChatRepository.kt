@@ -65,6 +65,28 @@ class ChatRepository(private val db: ChatDatabase) {
         )
     }
 
+    /** Copy a conversation's messages up to and including `uptoMessageId` into a new branch. */
+    suspend fun forkConversation(convId: String, uptoMessageId: String): String? {
+        val src = dao.conversation(convId) ?: return null
+        val msgs = dao.messagesOnce(convId)
+        val idx = msgs.indexOfFirst { it.id == uptoMessageId }
+        if (idx < 0) return null
+        val now = System.currentTimeMillis()
+        val fork = Conversation(
+            id = UUID.randomUUID().toString(),
+            title = src.title + " · fork",
+            model = src.model,
+            createdAt = now,
+            updatedAt = now,
+            systemPrompt = src.systemPrompt,
+        )
+        dao.upsertConversation(fork)
+        msgs.take(idx + 1).forEach { m ->
+            dao.upsertMessage(m.copy(id = UUID.randomUUID().toString(), conversationId = fork.id))
+        }
+        return fork.id
+    }
+
     suspend fun restoreConversation(s: ConversationSnapshot) {
         dao.upsertConversation(s.conversation)
         s.messages.forEach { dao.upsertMessage(it) }

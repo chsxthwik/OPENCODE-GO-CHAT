@@ -34,6 +34,7 @@ data class UiState(
     val contextDropped: Int = 0,
     val draft: String = "",
     val earlierCount: Int = 0,
+    val pendingChatSearch: String? = null,
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -153,10 +154,10 @@ class ChatViewModel(
         }
     }
 
-    fun openChat(id: String) {
+    fun openChat(id: String, searchQuery: String? = null) {
         messagesJob?.cancel()
         historyWindow.value = HISTORY_PAGE
-        _ui.update { it.copy(currentId = id, messages = emptyList(), streamingText = "", streamingId = null, agentTasks = emptyList(), agentSteps = emptyMap(), draft = "", earlierCount = 0) }
+        _ui.update { it.copy(currentId = id, messages = emptyList(), streamingText = "", streamingId = null, agentTasks = emptyList(), agentSteps = emptyMap(), draft = "", earlierCount = 0, pendingChatSearch = searchQuery) }
         viewModelScope.launch { settings.setLastChat(id) }
         messagesJob = viewModelScope.launch {
             launch {
@@ -208,6 +209,8 @@ class ChatViewModel(
     fun setArchived(id: String, archived: Boolean) = viewModelScope.launch { repo.setArchived(id, archived) }
     suspend fun searchConversations(query: String): List<String> = repo.conversationsMatching(query)
     fun setAgentMode(on: Boolean) = _ui.update { it.copy(agentMode = on) }
+
+    fun consumePendingSearch() = _ui.update { it.copy(pendingChatSearch = null) }
 
     private var lastDeleted: ConversationSnapshot? = null
 

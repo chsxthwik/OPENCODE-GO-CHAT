@@ -41,7 +41,7 @@ import kotlinx.coroutines.launch
 fun ChatListScreen(
     conversations: List<Conversation>,
     currentId: String?,
-    onOpen: (String) -> Unit,
+    onOpen: (String, String?) -> Unit,
     onNew: () -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
@@ -71,6 +71,7 @@ fun ChatListScreen(
         if (query.isBlank()) active
         else active.filter { it.title.contains(query, true) || msgMatches?.contains(it.id) == true }
     }
+    val deepLink = query.trim().takeIf { it.length >= 3 }
     val archivedCount = conversations.count { it.archived != 0 }
 
     Box(Modifier.fillMaxSize().background(GoColors.Bg)) {
@@ -141,13 +142,13 @@ fun ChatListScreen(
                 item { GoSectionLabel("pinned") }
             }
             items(pinned, key = { it.id }) { conv ->
-                ChatRow(conv, currentId, haptic, onOpen, onMenu = { menuFor = conv })
+                ChatRow(conv, currentId, haptic, { id -> onOpen(id, deepLink) }, onMenu = { menuFor = conv })
             }
             if (pinned.isNotEmpty() && rest.isNotEmpty()) {
                 item { GoSectionLabel("recent") }
             }
             items(rest, key = { it.id }) { conv ->
-                ChatRow(conv, currentId, haptic, onOpen, onMenu = { menuFor = conv })
+                ChatRow(conv, currentId, haptic, { id -> onOpen(id, deepLink) }, onMenu = { menuFor = conv })
             }
             if (archivedCount > 0) {
                 item {

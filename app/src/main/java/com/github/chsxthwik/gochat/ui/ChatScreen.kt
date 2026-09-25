@@ -129,6 +129,9 @@ fun ChatScreen(
     val activeMatchId = searchMatches.getOrNull(matchPos)?.id
     LaunchedEffect(searchMatches) { matchPos = (searchMatches.size - 1).coerceAtLeast(0) }
     LaunchedEffect(chatSearch != null) { if (chatSearch != null) searchFocus.requestFocus() }
+    LaunchedEffect(ui.pendingChatSearch) {
+        ui.pendingChatSearch?.let { chatSearch = it; vm.consumePendingSearch() }
+    }
     LaunchedEffect(activeMatchId) {
         val i = activeMatchId?.let { displayIndexOf[it] }
         if (i != null) listState.animateScrollToItem(i)

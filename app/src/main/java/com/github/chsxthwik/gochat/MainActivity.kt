@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
                                 ChatListScreen(
                                     conversations = ui.conversations,
                                     currentId = ui.currentId,
-                                    onOpen = { id -> vm.openChat(id); scope.launch { drawer.close() } },
+                                    onOpen = { id, q -> vm.openChat(id, q); scope.launch { drawer.close() } },
                                     onNew = { vm.newChat(); scope.launch { drawer.close() } },
                                     onRename = vm::renameChat,
                                     onDelete = vm::deleteChat,

@@ -95,11 +95,23 @@ interface ChatDao {
     @Query("DELETE FROM messages WHERE conversationId = :convId AND createdAt >= :fromTs")
     suspend fun deleteFrom(convId: String, fromTs: Long)
 
+    @Query("SELECT id FROM agent_tasks WHERE conversationId = :convId AND createdAt >= :fromTs")
+    suspend fun agentTaskIdsFrom(convId: String, fromTs: Long): List<String>
+
+    @Query("DELETE FROM agent_tasks WHERE conversationId = :convId AND createdAt >= :fromTs")
+    suspend fun deleteAgentTasksFrom(convId: String, fromTs: Long)
+
+    @Query("UPDATE messages SET status = 'INTERRUPTED' WHERE status = 'STREAMING'")
+    suspend fun markStreamingInterrupted(): Int
+
     @Query("DELETE FROM messages WHERE conversationId = :convId")
     suspend fun clearMessages(convId: String)
 
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :convId")
     suspend fun messageCount(convId: String): Int
+
+    @Query("UPDATE conversations SET model = :model WHERE id = :id")
+    suspend fun setConversationModel(id: String, model: String)
 
     @Query("SELECT * FROM agent_tasks WHERE conversationId = :convId ORDER BY createdAt ASC")
     fun agentTasks(convId: String): Flow<List<AgentTask>>

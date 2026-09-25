@@ -1,6 +1,7 @@
 package com.github.chsxthwik.gochat.ui
 
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -33,6 +34,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import com.github.chsxthwik.gochat.ChatViewModel
 import com.github.chsxthwik.gochat.UiState
 import com.github.chsxthwik.gochat.data.*
+import com.github.chsxthwik.gochat.ui.components.GoIconButton
 import com.github.chsxthwik.gochat.ui.theme.GoColors
 import com.github.chsxthwik.gochat.ui.theme.GoType
 import kotlinx.coroutines.delay
@@ -507,7 +510,7 @@ private fun ActionItem(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun MessageRow(
     m: MessageEntity,
@@ -526,6 +529,32 @@ private fun MessageRow(
     val isUser = m.role == "user"
     val clipboard = LocalClipboardManager.current
     var expandRun by remember(m.id) { mutableStateOf(false) }
+    var viewingImage by remember { mutableStateOf<Pair<Bitmap, String>?>(null) }
+    viewingImage?.let { (bmp, name) ->
+        BasicAlertDialog(onDismissRequest = { viewingImage = null }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = GoColors.Bg,
+            ) {
+                Column {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            name, style = GoType.MonoDim, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(start = 10.dp),
+                        )
+                        GoIconButton(Icons.Default.Close, "close", onClick = { viewingImage = null }, size = 18)
+                    }
+                    androidx.compose.foundation.Image(
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = name,
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().padding(10.dp),
+                    )
+                }
+            }
+        }
+    }
     Column(Modifier.fillMaxWidth()) {
         if (isUser) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -556,13 +585,35 @@ private fun MessageRow(
                         }.getOrDefault(emptyList())
                     }
                     atts.forEach { a ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
-                            Icon(
-                                if (a.imageBase64 != null) Icons.Default.Image else Icons.Default.Description,
-                                null, tint = GoColors.Accent, modifier = Modifier.size(13.dp),
+                        val image = remember(a.imageBase64) {
+                            a.imageBase64?.let { raw ->
+                                runCatching {
+                                    val bytes = android.util.Base64.decode(raw.substringAfter(','), android.util.Base64.DEFAULT)
+                                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                }.getOrNull()
+                            }
+                        }
+                        if (image != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = image.asImageBitmap(),
+                                contentDescription = a.name,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier
+                                    .padding(bottom = 6.dp)
+                                    .sizeIn(maxWidth = 220.dp, maxHeight = 260.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(1.dp, GoColors.Line, RoundedCornerShape(10.dp))
+                                    .clickable { viewingImage = image to a.name },
                             )
-                            Spacer(Modifier.width(5.dp))
-                            Text(a.name, style = GoType.MonoDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+                                Icon(
+                                    if (a.imageBase64 != null) Icons.Default.Image else Icons.Default.Description,
+                                    null, tint = GoColors.Accent, modifier = Modifier.size(13.dp),
+                                )
+                                Spacer(Modifier.width(5.dp))
+                                Text(a.name, style = GoType.MonoDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                     if (m.content.isNotBlank()) {

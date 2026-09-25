@@ -30,6 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -217,8 +221,19 @@ private fun PhaseChip(label: String, state: Int) {
 
 @Composable
 private fun StepRow(s: AgentStep) {
+    val detail = when {
+        s.status == AgentStepStatus.DONE.name && s.output.isNotBlank() -> s.output
+        s.status == AgentStepStatus.FAILED.name && s.error.isNotBlank() -> s.error
+        else -> ""
+    }
+    var open by remember { mutableStateOf(false) }
+    Column {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .then(if (detail.isNotBlank()) Modifier.clickable { open = !open } else Modifier)
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         when (s.status) {
@@ -252,6 +267,27 @@ private fun StepRow(s: AgentStep) {
                 style = GoType.Caption,
             )
         }
+        if (detail.isNotBlank()) {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                if (open) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                null, tint = GoColors.TextFaint, modifier = Modifier.size(11.dp),
+            )
+        }
+    }
+    if (open && detail.isNotBlank()) {
+        Text(
+            detail,
+            style = GoType.Caption.copy(color = GoColors.TextDim),
+            maxLines = 14,
+            modifier = Modifier
+                .padding(start = 20.dp, top = 2.dp, bottom = 4.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .background(GoColors.SurfaceHigh)
+                .padding(8.dp),
+        )
+    }
     }
 }
 

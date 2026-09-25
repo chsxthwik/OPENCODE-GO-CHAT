@@ -88,6 +88,7 @@ fun ChatScreen(
     var input by remember { mutableStateOf("") }
     var attachments by remember { mutableStateOf(listOf<Attachment>()) }
     var modelSheet by remember { mutableStateOf(false) }
+    var regenTarget by remember { mutableStateOf<MessageEntity?>(null) }
     var actionsFor by remember { mutableStateOf<MessageEntity?>(null) }
     var editing by remember { mutableStateOf<MessageEntity?>(null) }
     var editText by remember { mutableStateOf("") }
@@ -131,7 +132,9 @@ fun ChatScreen(
     }
     val activeMatchId = searchMatches.getOrNull(matchPos)?.id
     LaunchedEffect(searchMatches) { matchPos = (searchMatches.size - 1).coerceAtLeast(0) }
-    LaunchedEffect(chatSearch != null) { if (chatSearch != null) searchFocus.requestFocus() }
+    LaunchedEffect(chatSearch != null) {
+        if (chatSearch != null) { searchFocus.requestFocus(); vm.loadAllHistory() }
+    }
     LaunchedEffect(ui.pendingChatSearch) {
         ui.pendingChatSearch?.let { chatSearch = it; vm.consumePendingSearch() }
     }
@@ -553,10 +556,11 @@ fun ChatScreen(
 
     // ── model picker ─────────────────────────────────────────────
     if (modelSheet) {
-        ModalBottomSheet(onDismissRequest = { modelSheet = false }, containerColor = GoColors.Surface) {
+        ModalBottomSheet(onDismissRequest = { modelSheet = false; regenTarget = null }, containerColor = GoColors.Surface) {
             Column(Modifier.padding(bottom = 24.dp)) {
                 Text(
-                    "Models", style = MaterialTheme.typography.titleMedium,
+                    if (regenTarget != null) "Retry with another model" else "Models",
+                    style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
                 var q by remember(modelSheet) { mutableStateOf("") }
@@ -592,7 +596,8 @@ fun ChatScreen(
                                     .fillMaxWidth()
                                     .clickable {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        vm.selectModel(m.id); modelSheet = false
+                                        regenTarget?.let { vm.regenerate(it.id, m.id) } ?: vm.selectModel(m.id)
+                                        regenTarget = null; modelSheet = false
                                     }
                                     .padding(horizontal = 20.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -642,6 +647,9 @@ fun ChatScreen(
                 if (m.role == "assistant") {
                     ActionItem(Icons.Default.Refresh, "Regenerate") {
                         vm.regenerate(m.id); actionsFor = null
+                    }
+                    ActionItem(Icons.Default.Tune, "Try another model") {
+                        regenTarget = m; modelSheet = true; actionsFor = null
                     }
                 }
                 ActionItem(Icons.Default.Delete, "Delete from here", GoColors.Error) {

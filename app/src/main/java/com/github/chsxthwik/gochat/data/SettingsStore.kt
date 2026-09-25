@@ -13,6 +13,8 @@ import java.util.UUID
 
 private val Context.dataStore by preferencesDataStore(name = "gochat_settings")
 
+internal const val DEFAULT_GATEWAY_BASE = "https://opencode.ai/zen/go/v1"
+
 class SettingsStore(private val context: Context) {
 
     private object K {
@@ -24,6 +26,7 @@ class SettingsStore(private val context: Context) {
         val TEMPERATURE = floatPreferencesKey("temperature")
         val CONTEXT_LIMIT = intPreferencesKey("context_limit")
         val LAST_CHAT = stringPreferencesKey("last_chat_id")
+        val GATEWAY_BASE = stringPreferencesKey("gateway_base")
         val DEFAULT_MODEL = "glm-5.3-flash"
     }
 
@@ -34,6 +37,7 @@ class SettingsStore(private val context: Context) {
     val contextLimit: Flow<Int> = context.dataStore.data.map { it[K.CONTEXT_LIMIT] ?: 20 }
     val lastChatId: Flow<String?> = context.dataStore.data.map { it[K.LAST_CHAT] }
     val modelCacheJson: Flow<String?> = context.dataStore.data.map { it[K.MODEL_CACHE] }
+    val gatewayBase: Flow<String> = context.dataStore.data.map { it[K.GATEWAY_BASE] ?: DEFAULT_GATEWAY_BASE }
 
     fun apiKey(): Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[K.ENCRYPTED_KEY]?.let { KeyVault.decrypt(it) }
@@ -67,6 +71,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setContextLimit(n: Int) {
         context.dataStore.edit { it[K.CONTEXT_LIMIT] = n.coerceIn(1, 100) }
+    }
+
+    suspend fun setGatewayBase(url: String) {
+        context.dataStore.edit { it[K.GATEWAY_BASE] = url }
     }
 
     suspend fun setLastChat(id: String?) {

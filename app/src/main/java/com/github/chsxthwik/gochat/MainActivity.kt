@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
                         onContextLimit = vm::setContextLimit,
                         onRefreshModels = vm::refreshModels,
                         onDisconnect = { vm.disconnect(); settingsOpen = false },
+                        onGatewayBase = vm::setGatewayBase,
+                        onGatewayReset = vm::resetGatewayBase,
                         onClose = { settingsOpen = false },
                     )
                 }

@@ -11,6 +11,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -45,8 +46,17 @@ data class WireMessage(
     val images: List<String> = emptyList(), // base64 data URLs
 )
 
+/** Normalize a user-entered gateway URL: https implied, trailing slashes stripped. */
+fun normalizeGatewayBase(raw: String): String? {
+    var u = raw.trim()
+    if (u.isEmpty()) return null
+    if (!u.startsWith("http://") && !u.startsWith("https://")) u = "https://$u"
+    u = u.trimEnd('/')
+    return if (u.toHttpUrlOrNull() != null) u else null
+}
+
 class GoApi {
-    val base = "https://opencode.ai/zen/go/v1"
+    var base = "https://opencode.ai/zen/go/v1"
     val json = Json { ignoreUnknownKeys = true }
 
     val client: OkHttpClient = OkHttpClient.Builder()

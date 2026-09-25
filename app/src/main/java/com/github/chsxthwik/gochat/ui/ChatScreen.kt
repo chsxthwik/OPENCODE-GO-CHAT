@@ -224,6 +224,25 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    if (ui.earlierCount > 0) {
+                        item(key = "load-earlier") {
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(GoColors.Surface)
+                                    .border(1.dp, GoColors.Line, RoundedCornerShape(8.dp))
+                                    .clickable { vm.loadEarlier() }
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                Text(
+                                    "load ${minOf(ui.earlierCount, 60)} earlier · ${ui.earlierCount} total",
+                                    style = GoType.Caption,
+                                )
+                            }
+                        }
+                    }
                     items(ui.messages, key = { it.id }) { m ->
                         val task = ui.agentTasks.find { it.assistantMessageId == m.id }
                         Box(Modifier.animateItem()) {

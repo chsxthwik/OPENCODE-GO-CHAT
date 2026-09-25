@@ -80,6 +80,9 @@ interface ChatDao {
     @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt ASC, rowid ASC")
     fun messages(convId: String): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt DESC, rowid DESC LIMIT :limit")
+    fun messagesTail(convId: String, limit: Int): Flow<List<MessageEntity>>
+
     @Query("SELECT * FROM messages WHERE conversationId = :convId ORDER BY createdAt ASC, rowid ASC")
     suspend fun messagesOnce(convId: String): List<MessageEntity>
 

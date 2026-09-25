@@ -6,7 +6,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -21,10 +20,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -121,11 +121,11 @@ private fun inline(text: String): AnnotatedString = buildAnnotatedString {
     for (m in linkRegex.findAll(text)) {
         handledLink = true
         if (m.range.first > idx) appendStyled(text.substring(idx, m.range.first))
-        pushStringAnnotation("URL", m.groupValues[2])
-        withStyle(SpanStyle(color = GoColors.Accent, textDecoration = TextDecoration.Underline)) {
-            append(m.groupValues[1])
+        withLink(LinkAnnotation.Url(m.groupValues[2])) {
+            withStyle(SpanStyle(color = GoColors.Accent, textDecoration = TextDecoration.Underline)) {
+                append(m.groupValues[1])
+            }
         }
-        pop()
         idx = m.range.last + 1
     }
     if (idx < text.length || !handledLink) appendStyled(text.substring(idx))
@@ -202,7 +202,6 @@ fun MarkdownText(
     onCopied: (String) -> Unit = {},
 ) {
     val blocks = remember(markdown) { parseBlocks(markdown) }
-    val uri = LocalUriHandler.current
     val clipboard = LocalClipboardManager.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { b ->
@@ -210,14 +209,7 @@ fun MarkdownText(
                 is Block.Para -> {
                     val styled = remember(b.text) { inline(b.text) }
                     SelectionContainer {
-                        ClickableText(
-                            text = styled,
-                            style = MaterialTheme.typography.bodyLarge,
-                            onClick = { off ->
-                                styled.getStringAnnotations("URL", off, off).firstOrNull()
-                                    ?.let { uri.openUri(it.item) }
-                            },
-                        )
+                        Text(styled, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
                 is Block.Heading -> {

@@ -212,6 +212,17 @@ class ChatViewModel(
 
     fun consumePendingSearch() = _ui.update { it.copy(pendingChatSearch = null) }
 
+    /** Per-chat instructions win over the app-wide system prompt when set. */
+    private fun effectiveSystemPrompt(): String {
+        val conv = _ui.value.conversations.firstOrNull { it.id == _ui.value.currentId }
+        return conv?.systemPrompt?.takeIf { it.isNotBlank() } ?: _ui.value.systemPrompt
+    }
+
+    fun setChatSystemPrompt(prompt: String) {
+        val id = _ui.value.currentId ?: return
+        viewModelScope.launch { repo.setConversationPrompt(id, prompt.trim()) }
+    }
+
     private var lastDeleted: ConversationSnapshot? = null
 
     fun deleteChat(id: String) {
@@ -298,7 +309,7 @@ class ChatViewModel(
                     model = model,
                     apiKey = key,
                     sessionId = sessionId,
-                    systemPrompt = _ui.value.systemPrompt,
+                    systemPrompt = effectiveSystemPrompt(),
                     temperature = _ui.value.temperature,
                 ),
                 taskId = task.id,
@@ -413,7 +424,7 @@ class ChatViewModel(
         val buf = StringBuilder()
         var lastEmit = 0L
         try {
-            api.streamChat(key, sessionId, goModel, wire, _ui.value.systemPrompt, _ui.value.temperature)
+            api.streamChat(key, sessionId, goModel, wire, effectiveSystemPrompt(), _ui.value.temperature)
                 .collect { ev ->
                     when (ev) {
                         is ChatEvent.Delta -> {

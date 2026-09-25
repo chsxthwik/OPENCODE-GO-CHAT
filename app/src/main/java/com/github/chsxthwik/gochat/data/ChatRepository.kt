@@ -69,7 +69,15 @@ class ChatRepository(private val db: ChatDatabase) {
         dao.renameConversation(convId, title)
     }
 
-    suspend fun deleteFrom(convId: String, fromTs: Long) = dao.deleteFrom(convId, fromTs)
+    /** Deletes messages from a timestamp and the agent runs that produced them. */
+    suspend fun deleteFrom(convId: String, fromTs: Long) {
+        dao.agentTaskIdsFrom(convId, fromTs).forEach { dao.deleteAgentSteps(it) }
+        dao.deleteAgentTasksFrom(convId, fromTs)
+        dao.deleteFrom(convId, fromTs)
+    }
+
+    suspend fun markStreamingInterrupted() = dao.markStreamingInterrupted()
+    suspend fun setConversationModel(id: String, model: String) = dao.setConversationModel(id, model)
     suspend fun deleteMessage(id: String) = dao.deleteMessage(id)
 
     // ── agent tasks ────────────────────────────────────────────────

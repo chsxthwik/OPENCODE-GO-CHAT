@@ -52,7 +52,7 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
         Text("GoChat", style = GoType.Display)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Chat with every OpenCode Go model.\nOne key, forty models, on-device only.",
+            "Chat with every OpenCode Go model.\nOne key, on-device only.",
             style = MaterialTheme.typography.bodyMedium,
             color = GoColors.TextDim,
             textAlign = TextAlign.Center,

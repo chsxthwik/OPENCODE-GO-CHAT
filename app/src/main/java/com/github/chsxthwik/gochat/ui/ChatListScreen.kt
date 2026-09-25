@@ -169,8 +169,13 @@ fun ChatListScreen(
 
     if (menuFor != null) {
         val c = menuFor!!
-        AlertDialog(onDismissRequest = { menuFor = null }) {
-            Column {
+        BasicAlertDialog(onDismissRequest = { menuFor = null }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = GoColors.Surface,
+                tonalElevation = 3.dp,
+            ) {
+            Column(Modifier.padding(vertical = 8.dp)) {
                 TextButton(onClick = { renaming = c; renameText = c.title; menuFor = null }) {
                     Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Rename")
                 }
@@ -186,6 +191,7 @@ fun ChatListScreen(
                     Icon(Icons.Default.Delete, null, tint = GoColors.Error, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp)); Text("Delete", color = GoColors.Error)
                 }
+            }
             }
         }
     }

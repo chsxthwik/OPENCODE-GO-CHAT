@@ -83,6 +83,8 @@ class ChatViewModel(
             repo.liveAgentTasks().forEach { t ->
                 repo.upsertAgentTask(t.copy(status = AgentTaskStatus.INTERRUPTED.name, updatedAt = System.currentTimeMillis()))
             }
+            // messages stuck mid-stream across a restart render as interrupted, not empty
+            repo.markStreamingInterrupted()
         }
     }
 
@@ -130,7 +132,11 @@ class ChatViewModel(
 
     fun selectModel(id: String) {
         _ui.update { it.copy(model = id) }
-        viewModelScope.launch { settings.setModel(id) }
+        viewModelScope.launch {
+            settings.setModel(id)
+            // keep the open conversation's model in sync — it drives the drawer subtitle
+            _ui.value.currentId?.let { repo.setConversationModel(it, id) }
+        }
     }
 
     fun setSystemPrompt(p: String) = viewModelScope.launch { settings.setSystemPrompt(p) }

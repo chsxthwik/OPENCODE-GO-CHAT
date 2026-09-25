@@ -91,6 +91,9 @@ fun ChatScreen(
     var editing by remember { mutableStateOf<MessageEntity?>(null) }
     var editText by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
+    var chatSearch by remember { mutableStateOf<String?>(null) }
+    var matchPos by remember { mutableIntStateOf(0) }
+    val searchFocus = remember { FocusRequester() }
 
     val conv = ui.conversations.find { it.id == ui.currentId }
     val streaming = ui.sending
@@ -102,6 +105,33 @@ fun ChatScreen(
     // drafts: restore the saved draft, persist after a typing pause
     LaunchedEffect(ui.currentId) { input = ui.draft }
     LaunchedEffect(input) { if (input != ui.draft) { delay(350); vm.saveDraft(input) } }
+
+    // day separators fold into the row list; search matches jump to display indices
+    val displayItems = remember(ui.messages, ui.earlierCount) {
+        buildList<ChatRowItem> {
+            if (ui.earlierCount > 0) add(ChatRowItem.LoadEarlier)
+            var lastDay = ""
+            for (m in ui.messages) {
+                val d = dayKey(m.createdAt)
+                if (d != lastDay) { add(ChatRowItem.Day(dayLabel(d))); lastDay = d }
+                add(ChatRowItem.Msg(m))
+            }
+        }
+    }
+    val displayIndexOf = remember(displayItems) {
+        displayItems.mapIndexedNotNull { i, r -> (r as? ChatRowItem.Msg)?.let { it.m.id to i } }.toMap()
+    }
+    val searchMatches = remember(ui.messages, chatSearch) {
+        val q = chatSearch?.trim().orEmpty()
+        if (q.length < 2) emptyList() else ui.messages.filter { it.content.contains(q, true) }
+    }
+    val activeMatchId = searchMatches.getOrNull(matchPos)?.id
+    LaunchedEffect(searchMatches) { matchPos = (searchMatches.size - 1).coerceAtLeast(0) }
+    LaunchedEffect(chatSearch != null) { if (chatSearch != null) searchFocus.requestFocus() }
+    LaunchedEffect(activeMatchId) {
+        val i = activeMatchId?.let { displayIndexOf[it] }
+        if (i != null) listState.animateScrollToItem(i)
+    }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -141,8 +171,8 @@ fun ChatScreen(
     }
 
     LaunchedEffect(ui.messages.size, ui.streamingText.length) {
-        if (ui.messages.isNotEmpty() && listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 >= ui.messages.size - 2)
-            listState.animateScrollToItem(ui.messages.size - 1)
+        if (ui.messages.isNotEmpty() && listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 >= displayItems.size - 2)
+            listState.animateScrollToItem(displayItems.size - 1)
     }
 
     Box(Modifier.fillMaxSize().background(GoColors.Bg)) {
@@ -153,6 +183,37 @@ fun ChatScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, "chats", tint = GoColors.TextDim) }
+            if (chatSearch != null) {
+                OutlinedTextField(
+                    value = chatSearch!!,
+                    onValueChange = { chatSearch = it },
+                    modifier = Modifier.weight(1f).height(52.dp).focusRequester(searchFocus),
+                    placeholder = { Text("Search this chat", style = GoType.Caption.copy(color = GoColors.TextFaint)) },
+                    singleLine = true,
+                    textStyle = GoType.Body.copy(color = GoColors.Text),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoColors.Accent.copy(alpha = 0.5f),
+                        unfocusedBorderColor = GoColors.Line,
+                    ),
+                )
+                if ((chatSearch ?: "").trim().length >= 2) {
+                    Text(
+                        if (searchMatches.isEmpty()) "0/0" else "${matchPos + 1}/${searchMatches.size}",
+                        style = GoType.Caption,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                    IconButton(
+                        onClick = { if (matchPos > 0) matchPos-- },
+                        enabled = matchPos > 0,
+                    ) { Icon(Icons.Default.KeyboardArrowUp, "older match", tint = if (matchPos > 0) GoColors.TextDim else GoColors.TextFaint) }
+                    IconButton(
+                        onClick = { if (matchPos < searchMatches.size - 1) matchPos++ },
+                        enabled = matchPos < searchMatches.size - 1,
+                    ) { Icon(Icons.Default.KeyboardArrowDown, "newer match", tint = if (matchPos < searchMatches.size - 1) GoColors.TextDim else GoColors.TextFaint) }
+                }
+                IconButton(onClick = { chatSearch = null; matchPos = 0 }) { Icon(Icons.Default.Close, "close search", tint = GoColors.TextDim) }
+            } else {
             Column(Modifier.weight(1f).clickable { modelSheet = true }) {
                 Text(
                     conv?.title ?: "GoChat",
@@ -171,7 +232,9 @@ fun ChatScreen(
                     }
                 }
             }
+            IconButton(onClick = { chatSearch = "" }) { Icon(Icons.Default.Search, "search this chat", tint = GoColors.TextDim) }
             IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "more", tint = GoColors.TextDim) }
+            }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
                     text = { Text("Export chat") },
@@ -224,9 +287,25 @@ fun ChatScreen(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    if (ui.earlierCount > 0) {
-                        item(key = "load-earlier") {
-                            Row(
+                    items(
+                        displayItems,
+                        key = { row ->
+                            when (row) {
+                                ChatRowItem.LoadEarlier -> "load-earlier"
+                                is ChatRowItem.Day -> "day-" + row.label
+                                is ChatRowItem.Msg -> row.m.id
+                            }
+                        },
+                        contentType = { row ->
+                            when (row) {
+                                ChatRowItem.LoadEarlier -> 0
+                                is ChatRowItem.Day -> 1
+                                is ChatRowItem.Msg -> 2
+                            }
+                        },
+                    ) { row ->
+                        when (row) {
+                            ChatRowItem.LoadEarlier -> Row(
                                 Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
@@ -241,25 +320,35 @@ fun ChatScreen(
                                     style = GoType.Caption,
                                 )
                             }
-                        }
-                    }
-                    items(ui.messages, key = { it.id }) { m ->
-                        val task = ui.agentTasks.find { it.assistantMessageId == m.id }
-                        Box(Modifier.animateItem()) {
-                            MessageRow(
-                                m = m,
-                                isStreaming = m.id == ui.streamingId,
-                                streamText = if (m.id == ui.streamingId) ui.streamingText else "",
-                                task = task,
-                                steps = task?.let { ui.agentSteps[it.id] }.orEmpty(),
-                                onActions = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); actionsFor = m },
-                                onRetry = { vm.regenerate(m.id) },
-                                onCopied = { toast("Copied") },
-                                onApprove = { task?.let { vm.approvePlan(it.id) } },
-                                onReject = { task?.let { vm.rejectPlan(it.id) } },
-                                onResume = { task?.let { vm.resumeAgent(it.id) } },
-                                onCancelAgent = { vm.stop() },
-                            )
+                            is ChatRowItem.Day -> DaySeparator(row.label)
+                            is ChatRowItem.Msg -> {
+                                val m = row.m
+                                val task = ui.agentTasks.find { it.assistantMessageId == m.id }
+                                Box(
+                                    Modifier
+                                        .animateItem()
+                                        .then(
+                                            if (m.id == activeMatchId) {
+                                                Modifier.background(GoColors.AccentSoft.copy(alpha = 0.18f), RoundedCornerShape(12.dp))
+                                            } else Modifier,
+                                        ),
+                                ) {
+                                    MessageRow(
+                                        m = m,
+                                        isStreaming = m.id == ui.streamingId,
+                                        streamText = if (m.id == ui.streamingId) ui.streamingText else "",
+                                        task = task,
+                                        steps = task?.let { ui.agentSteps[it.id] }.orEmpty(),
+                                        onActions = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); actionsFor = m },
+                                        onRetry = { vm.regenerate(m.id) },
+                                        onCopied = { toast("Copied") },
+                                        onApprove = { task?.let { vm.approvePlan(it.id) } },
+                                        onReject = { task?.let { vm.rejectPlan(it.id) } },
+                                        onResume = { task?.let { vm.resumeAgent(it.id) } },
+                                        onCancelAgent = { vm.stop() },
+                                    )
+                                }
+                            }
                         }
                     }
                     if (ui.thinking && ui.agentTasks.none { it.status == AgentTaskStatus.RUNNING.name }) item { ThinkingDots() }
@@ -269,12 +358,12 @@ fun ChatScreen(
             val showJump by remember {
                 derivedStateOf {
                     val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                    ui.messages.size - 1 - last > 2
+                    displayItems.size - 1 - last > 2
                 }
             }
             if (showJump) {
                 SmallFloatingActionButton(
-                    onClick = { scope.launch { listState.animateScrollToItem(ui.messages.size - 1) } },
+                    onClick = { scope.launch { listState.animateScrollToItem(displayItems.size - 1) } },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp).size(36.dp),
                     containerColor = GoColors.SurfaceHigh,
                     contentColor = GoColors.Accent,
@@ -804,3 +893,36 @@ private fun EmptyState(onSuggest: (String) -> Unit) {
 
 private fun formatStamp(ts: Long): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(ts))
+
+private sealed interface ChatRowItem {
+    data object LoadEarlier : ChatRowItem
+    data class Day(val label: String) : ChatRowItem
+    data class Msg(val m: MessageEntity) : ChatRowItem
+}
+
+@Composable
+private fun DaySeparator(label: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HorizontalDivider(Modifier.weight(1f), color = GoColors.Line)
+        Text(label, style = GoType.Caption.copy(color = GoColors.TextFaint), modifier = Modifier.padding(horizontal = 10.dp))
+        HorizontalDivider(Modifier.weight(1f), color = GoColors.Line)
+    }
+}
+
+private val DAY_FMT = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+private fun dayKey(ts: Long): String = DAY_FMT.format(Date(ts))
+
+private fun dayLabel(key: String): String {
+    val now = System.currentTimeMillis()
+    if (key == dayKey(now)) return "today"
+    if (key == dayKey(now - 86_400_000)) return "yesterday"
+    return runCatching {
+        val d = DAY_FMT.parse(key)!!
+        val thisYear = SimpleDateFormat("yyyy", Locale.US).format(Date(now))
+        SimpleDateFormat(if (key.take(4) == thisYear) "MMM d" else "MMM d, yyyy", Locale.US).format(d)
+    }.getOrDefault(key)
+}

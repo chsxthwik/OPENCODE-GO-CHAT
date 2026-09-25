@@ -1,5 +1,7 @@
 package com.github.chsxthwik.gochat.data
 
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -15,7 +17,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 sealed class ChatEvent {
@@ -140,6 +141,21 @@ class GoApi {
                         delay(if (e.error.kind == GoError.Kind.RATE_LIMITED) 1500 else 500)
                         continue
                     }
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: IOException) {
+                    // raw transport failures (refused, timeout, DNS, TLS) —
+                    // retry once like any other transient error
+                    lastError = GoError(GoError.Kind.NO_CONNECTION)
+                    if (retries < 1) {
+                        retries++
+                        delay(500)
+                        continue
+                    }
+                    break
+                } catch (e: Exception) {
+                    lastError = GoError(GoError.Kind.UNKNOWN, detail = e.message.orEmpty().take(120))
                     break
                 }
             }

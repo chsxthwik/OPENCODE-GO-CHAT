@@ -37,8 +37,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.chsxthwik.gochat.data.AgentPhase
@@ -47,6 +45,7 @@ import com.github.chsxthwik.gochat.data.AgentStepStatus
 import com.github.chsxthwik.gochat.data.AgentTask
 import com.github.chsxthwik.gochat.data.AgentTaskStatus
 import com.github.chsxthwik.gochat.ui.theme.GoColors
+import com.github.chsxthwik.gochat.ui.theme.GoType
 
 private val PHASE_LABELS = mapOf(
     AgentPhase.UNDERSTAND.name to "understand",
@@ -75,13 +74,13 @@ fun AgentTimeline(
             .padding(horizontal = 8.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(GoColors.Surface)
-            .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(12.dp))
+            .border(1.dp, GoColors.Line, RoundedCornerShape(12.dp))
             .semantics { liveRegion = LiveRegionMode.Polite }
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         // header: agent · phase chips
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("agent", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = GoColors.Accent, fontWeight = FontWeight.SemiBold)
+            Text("agent", style = GoType.LabelStrong)
             Spacer(Modifier.width(10.dp))
             PHASE_LABELS.forEach { (phase, label) ->
                 PhaseChip(
@@ -94,8 +93,7 @@ fun AgentTimeline(
             if (task.status == AgentTaskStatus.RUNNING.name || task.status == AgentTaskStatus.AWAITING_APPROVAL.name) {
                 Text(
                     "cancel",
-                    fontFamily = FontFamily.Monospace, fontSize = 10.sp,
-                    color = GoColors.TextFaint,
+                    style = GoType.Caption,
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .clickable(onClick = onCancel)
@@ -106,7 +104,7 @@ fun AgentTimeline(
 
         if (task.planSummary.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
-            Text(task.planSummary, fontSize = 12.sp, color = GoColors.TextDim, lineHeight = 16.sp)
+            Text(task.planSummary, style = GoType.BodySmall)
         }
 
         if (steps.isNotEmpty()) {
@@ -125,13 +123,13 @@ fun AgentTimeline(
             AgentTaskStatus.INTERRUPTED.name, AgentTaskStatus.FAILED.name -> {
                 if (task.error.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))
-                    Text(task.error, fontSize = 12.sp, color = GoColors.Error, maxLines = 2)
+                    Text(task.error, style = GoType.BodySmall.copy(color = GoColors.Error), maxLines = 2)
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(GoColors.Surface2)
+                        .background(GoColors.SurfaceHigh)
                         .clickable(onClick = onResume)
                         .semantics { contentDescription = "Resume agent run" }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -141,7 +139,7 @@ fun AgentTimeline(
                     Spacer(Modifier.width(5.dp))
                     Text(
                         if (task.status == AgentTaskStatus.FAILED.name) "failed — tap to resume" else "interrupted — tap to resume",
-                        fontSize = 11.sp, color = GoColors.Accent, fontFamily = FontFamily.Monospace,
+                        style = GoType.Caption.copy(color = GoColors.Accent),
                     )
                 }
             }
@@ -158,13 +156,13 @@ fun RunSummary(task: AgentTask, stepCount: Int, expanded: Boolean, onToggle: () 
             .padding(horizontal = 8.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(GoColors.Surface)
-            .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(8.dp))
+            .border(1.dp, GoColors.Line, RoundedCornerShape(8.dp))
             .clickable(onClick = onToggle)
             .semantics { contentDescription = if (expanded) "Hide agent run details" else "Show agent run details" }
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("agent", fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = GoColors.Accent)
+        Text("agent", style = GoType.CaptionStrong.copy(color = GoColors.Accent))
         Spacer(Modifier.width(8.dp))
         Text(
             buildString {
@@ -172,7 +170,7 @@ fun RunSummary(task: AgentTask, stepCount: Int, expanded: Boolean, onToggle: () 
                 val wall = task.updatedAt - task.createdAt
                 if (wall > 0) append(" · %.0fs".format(wall / 1000f))
             },
-            fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = GoColors.TextFaint,
+            style = GoType.Caption,
         )
         Spacer(Modifier.weight(1f))
         Icon(
@@ -202,14 +200,14 @@ private fun phaseState(task: AgentTask, phase: String): Int {
 @Composable
 private fun PhaseChip(label: String, state: Int) {
     val (fg, bg) = when (state) {
-        1 -> GoColors.Accent to GoColors.Accent.copy(alpha = 0.14f)
-        2 -> GoColors.TextDim to GoColors.Surface2
-        3 -> GoColors.Error to GoColors.Error.copy(alpha = 0.12f)
+        1 -> GoColors.Accent to GoColors.AccentSoft
+        2 -> GoColors.TextDim to GoColors.SurfaceHigh
+        3 -> GoColors.Error to GoColors.ErrorSoft
         else -> GoColors.TextFaint to androidx.compose.ui.graphics.Color.Transparent
     }
     Text(
         label,
-        fontFamily = FontFamily.Monospace, fontSize = 9.5.sp, color = fg,
+        style = GoType.Caption.copy(fontSize = 9.5.sp, color = fg),
         modifier = Modifier
             .clip(RoundedCornerShape(5.dp))
             .background(bg)
@@ -231,18 +229,19 @@ private fun StepRow(s: AgentStep) {
             AgentStepStatus.FAILED.name ->
                 Icon(Icons.Default.Close, null, tint = GoColors.Error, modifier = Modifier.size(12.dp))
             else ->
-                Box(Modifier.size(11.dp).clip(CircleShape).background(GoColors.GlassBorder))
+                Box(Modifier.size(11.dp).clip(CircleShape).background(GoColors.Line))
         }
         Spacer(Modifier.width(8.dp))
         Text(
             s.title,
-            fontSize = 12.5.sp,
-            color = when (s.status) {
-                AgentStepStatus.DONE.name -> GoColors.TextDim
-                AgentStepStatus.RUNNING.name -> GoColors.Text
-                AgentStepStatus.FAILED.name -> GoColors.Error
-                else -> GoColors.TextFaint
-            },
+            style = GoType.BodySmall.copy(
+                color = when (s.status) {
+                    AgentStepStatus.DONE.name -> GoColors.TextDim
+                    AgentStepStatus.RUNNING.name -> GoColors.Text
+                    AgentStepStatus.FAILED.name -> GoColors.Error
+                    else -> GoColors.TextFaint
+                }
+            ),
             maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
@@ -250,7 +249,7 @@ private fun StepRow(s: AgentStep) {
         if (dur > 0) {
             Text(
                 "%.1fs".format(dur / 1000f),
-                fontFamily = FontFamily.Monospace, fontSize = 10.sp, color = GoColors.TextFaint,
+                style = GoType.Caption,
             )
         }
     }
@@ -260,11 +259,12 @@ private fun StepRow(s: AgentStep) {
 private fun ApprovalButton(label: String, accent: Boolean, onClick: () -> Unit) {
     Text(
         label,
-        fontSize = 13.sp, fontWeight = FontWeight.Medium,
-        color = if (accent) GoColors.Bg else GoColors.TextDim,
+        style = GoType.TitleSmall.copy(
+            color = if (accent) GoColors.OnAccent else GoColors.TextDim,
+        ),
         modifier = Modifier
             .clip(RoundedCornerShape(9.dp))
-            .background(if (accent) GoColors.Accent else GoColors.Surface2)
+            .background(if (accent) GoColors.Accent else GoColors.SurfaceHigh)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
     )

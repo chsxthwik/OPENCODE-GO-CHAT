@@ -33,6 +33,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.chsxthwik.gochat.ui.theme.GoColors
+import com.github.chsxthwik.gochat.ui.theme.GoType
 
 internal sealed class Block {
     data class Heading(val level: Int, val text: String) : Block()
@@ -148,7 +149,7 @@ private fun AnnotatedString.Builder.appendStyled(s: String) {
                 val end = s.indexOf("`", i + 1)
                 if (end > i) {
                     emitPlain()
-                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = GoColors.Surface2, fontSize = 13.sp)) {
+                    withStyle(SpanStyle(fontFamily = FontFamily.Monospace, background = GoColors.SurfaceHigh, fontSize = 12.5.sp)) {
                         append(" ${s.substring(i + 1, end)} ")
                     }
                     i = end + 1; seg = i
@@ -206,25 +207,33 @@ fun MarkdownText(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         blocks.forEach { b ->
             when (b) {
-                is Block.Para -> SelectionContainer {
-                    ClickableText(
-                        text = inline(b.text),
-                        style = MaterialTheme.typography.bodyLarge,
-                        onClick = { off ->
-                            inline(b.text).getStringAnnotations("URL", off, off).firstOrNull()
-                                ?.let { uri.openUri(it.item) }
-                        },
-                    )
+                is Block.Para -> {
+                    val styled = remember(b.text) { inline(b.text) }
+                    SelectionContainer {
+                        ClickableText(
+                            text = styled,
+                            style = MaterialTheme.typography.bodyLarge,
+                            onClick = { off ->
+                                styled.getStringAnnotations("URL", off, off).firstOrNull()
+                                    ?.let { uri.openUri(it.item) }
+                            },
+                        )
+                    }
                 }
                 is Block.Heading -> {
-                    val size = when (b.level) { 1 -> 20.sp; 2 -> 18.sp; 3 -> 16.sp; else -> 15.sp }
-                    Text(b.text, fontWeight = FontWeight.Bold, fontSize = size, color = GoColors.Text)
+                    val style = when (b.level) {
+                        1 -> GoType.Headline
+                        2 -> GoType.Headline.copy(fontSize = 18.sp)
+                        3 -> GoType.Title
+                        else -> GoType.TitleSmall.copy(fontWeight = FontWeight.Bold)
+                    }
+                    Text(b.text, style = style)
                 }
                 is Block.Quote -> Row(
                     Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(GoColors.Surface)
-                        .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(6.dp))
+                        .border(1.dp, GoColors.Line, RoundedCornerShape(6.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Box(Modifier.width(3.dp).height(18.dp).background(GoColors.Accent))
@@ -240,13 +249,13 @@ fun MarkdownText(
                     )
                     Text(inline(b.text), style = MaterialTheme.typography.bodyLarge)
                 }
-                is Block.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(GoColors.GlassBorder))
+                is Block.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(GoColors.Line))
                 is Block.Code -> Column(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
                         .background(GoColors.CodeBg)
-                        .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(10.dp))
+                        .border(1.dp, GoColors.Line, RoundedCornerShape(10.dp))
                 ) {
                     Row(
                         Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 4.dp),
@@ -267,11 +276,8 @@ fun MarkdownText(
                     }
                     SelectionContainer {
                         Text(
-                            tintCode(b.code),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp,
-                            lineHeight = 19.sp,
-                            color = GoColors.Text,
+                            remember(b.code) { tintCode(b.code) },
+                            style = GoType.Code,
                             modifier = Modifier
                                 .horizontalScroll(rememberScrollState())
                                 .padding(horizontal = 12.dp)
@@ -284,13 +290,13 @@ fun MarkdownText(
                     Column(
                         Modifier
                             .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, GoColors.GlassBorder, RoundedCornerShape(10.dp))
+                            .border(1.dp, GoColors.Line, RoundedCornerShape(10.dp))
                             .horizontalScroll(scroll)
                     ) {
                         b.rows.forEachIndexed { ri, row ->
                             Row(
                                 Modifier
-                                    .background(if (ri == 0) GoColors.Surface2 else GoColors.Surface)
+                                    .background(if (ri == 0) GoColors.SurfaceHigh else GoColors.Surface)
                                     .padding(horizontal = 4.dp)
                             ) {
                                 row.forEach { cell ->
@@ -298,11 +304,12 @@ fun MarkdownText(
                                         inline(cell),
                                         style = MaterialTheme.typography.bodyMedium,
                                         fontWeight = if (ri == 0) FontWeight.SemiBold else FontWeight.Normal,
+                                        color = if (ri == 0) GoColors.Text else GoColors.TextDim,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp).widthIn(min = 60.dp),
                                     )
                                 }
                             }
-                            if (ri < b.rows.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(GoColors.GlassBorder))
+                            if (ri < b.rows.lastIndex) Box(Modifier.fillMaxWidth().height(1.dp).background(GoColors.Line))
                         }
                     }
                 }

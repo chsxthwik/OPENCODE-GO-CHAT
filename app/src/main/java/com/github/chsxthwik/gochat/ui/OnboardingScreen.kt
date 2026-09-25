@@ -17,8 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +70,7 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
                 IconButton(onClick = { reveal = !reveal }) {
                     Icon(
                         if (reveal) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        null, tint = GoColors.TextDim,
+                        if (reveal) "Hide key" else "Show key", tint = GoColors.TextDim,
                     )
                 }
             },
@@ -78,13 +82,21 @@ fun OnboardingScreen(ui: UiState, onConnect: (String) -> Unit) {
                 unfocusedBorderColor = GoColors.GlassBorder,
                 cursorColor = GoColors.Accent,
             ),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Done,
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+            ),
+            isError = ui.connectError != null,
             keyboardActions = KeyboardActions(onDone = { onConnect(key) }),
         )
 
         ui.connectError?.let {
             Spacer(Modifier.height(10.dp))
-            Text(it, color = GoColors.Error, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                it, color = GoColors.Error, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
 
         Spacer(Modifier.height(18.dp))

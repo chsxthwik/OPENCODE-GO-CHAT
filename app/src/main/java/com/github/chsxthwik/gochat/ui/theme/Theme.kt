@@ -20,7 +20,7 @@ object GoColors {
     val AccentDim = Color(0xFF92610A)
     val Text = Color(0xFFE7E7EA)
     val TextDim = Color(0xFF9B9BA4)
-    val TextFaint = Color(0xFF5D5D68)
+    val TextFaint = Color(0xFF787884)
     val UserBubble = Color(0xFF1F1F28)
     val Error = Color(0xFFEF4444)
     val Ok = Color(0xFF34D399)

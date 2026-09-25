@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -42,6 +44,7 @@ fun ChatListScreen(
     onDelete: (String) -> Unit,
     onSettings: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     var query by remember { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     var renaming by remember { mutableStateOf<Conversation?>(null) }
@@ -91,6 +94,27 @@ fun ChatListScreen(
             }
         }
 
+        if (shown.isEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().weight(1f).padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    if (query.isBlank()) "No chats yet" else "No chats match \"$query\"",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GoColors.TextDim,
+                )
+                if (query.isBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Start one above — it's saved on this device.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = GoColors.TextFaint,
+                    )
+                }
+            }
+        }
         LazyColumn(Modifier.fillMaxSize()) {
             items(shown, key = { it.id }) { conv ->
                 val active = conv.id == currentId
@@ -102,7 +126,10 @@ fun ChatListScreen(
                         .background(if (active) GoColors.Surface2 else GoColors.Bg)
                         .combinedClickable(
                             onClick = { onOpen(conv.id) },
-                            onLongClick = { menuFor = conv },
+                            onLongClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                menuFor = conv
+                            },
                         )
                         .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,

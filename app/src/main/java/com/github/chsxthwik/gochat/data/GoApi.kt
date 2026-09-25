@@ -79,10 +79,21 @@ class GoApi {
             }
         }
 
+    /** Errors that can never succeed on retry (auth, quota, malformed request). */
+    private fun GoError.isPermanent() =
+        kind == GoError.Kind.INVALID_KEY || kind == GoError.Kind.QUOTA ||
+            (kind == GoError.Kind.UNKNOWN && httpCode in 400..499)
+
+    /** Errors worth one bounded backoff-retry on the same endpoint. */
+    private fun GoError.isRetryable() =
+        kind == GoError.Kind.NO_CONNECTION || kind == GoError.Kind.SERVER || kind == GoError.Kind.RATE_LIMITED
+
     /**
      * Streams a reply. Tries the model's primary protocol first, then falls back
-     * across the other two Go endpoints on protocol-level failures (4xx/5xx),
-     * with one silent retry on transport errors.
+     * across the other two Go endpoints on protocol-level failures. Permanent
+     * errors (bad key, quota, 4xx) abort immediately — they'd fail identically
+     * on every endpoint. Retryable errors get one exponential-backoff retry per
+     * endpoint before falling through.
      */
     fun streamChat(
         apiKey: String,
@@ -95,7 +106,7 @@ class GoApi {
         val order = listOf(model.protocol) + ApiProtocol.entries.filter { it != model.protocol }
         var lastError: GoError? = null
         for (proto in order) {
-            var transportRetries = 0
+            var retries = 0
             while (true) {
                 try {
                     var done: ChatEvent.Done? = null
@@ -111,9 +122,12 @@ class GoApi {
                     return@flow
                 } catch (e: GoErrorException) {
                     lastError = e.error
-                    if (e.error.kind == GoError.Kind.NO_CONNECTION && transportRetries < 1) {
-                        transportRetries++
-                        delay(400)
+                    if (e.error.isPermanent()) {
+                        emit(ChatEvent.Failure(e.error)); return@flow
+                    }
+                    if (e.error.isRetryable() && retries < 1) {
+                        retries++
+                        delay(if (e.error.kind == GoError.Kind.RATE_LIMITED) 1500 else 500)
                         continue
                     }
                     break

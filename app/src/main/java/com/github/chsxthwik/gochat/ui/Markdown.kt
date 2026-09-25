@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.github.chsxthwik.gochat.ui.theme.GoColors
 
-private sealed class Block {
+internal sealed class Block {
     data class Heading(val level: Int, val text: String) : Block()
     data class Code(val lang: String, val code: String) : Block()
     data class Quote(val text: String) : Block()
@@ -44,7 +44,7 @@ private sealed class Block {
     data class Para(val text: String) : Block()
 }
 
-private fun parseBlocks(md: String): List<Block> {
+internal fun parseBlocks(md: String): List<Block> {
     val out = mutableListOf<Block>()
     val lines = md.replace("\r\n", "\n").split("\n")
     var i = 0

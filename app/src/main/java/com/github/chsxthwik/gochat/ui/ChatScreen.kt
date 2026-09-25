@@ -95,6 +95,10 @@ fun ChatScreen(
     val snack = remember { SnackbarHostState() }
     fun toast(msg: String) = scope.launch { snack.showSnackbar(msg) }
 
+    // drafts: restore the saved draft, persist after a typing pause
+    LaunchedEffect(ui.currentId) { input = ui.draft }
+    LaunchedEffect(input) { if (input != ui.draft) { delay(350); vm.saveDraft(input) } }
+
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         runCatching {
@@ -154,6 +158,13 @@ fun ChatScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(ui.model.ifBlank { "pick model" }, style = MaterialTheme.typography.labelSmall, color = GoColors.Accent)
                     Icon(Icons.Default.KeyboardArrowDown, null, tint = GoColors.TextFaint, modifier = Modifier.size(14.dp))
+                    if (ui.contextTokens > 0) {
+                        val tok = if (ui.contextTokens >= 1000) "~${"%.1f".format(ui.contextTokens / 1000f)}k" else "~${ui.contextTokens}"
+                        Text(
+                            "  ·  $tok tok" + if (ui.contextDropped > 0) " · ${ui.contextDropped} trimmed" else "",
+                            style = MaterialTheme.typography.labelSmall, color = GoColors.TextFaint,
+                        )
+                    }
                 }
             }
             IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.MoreVert, "more", tint = GoColors.TextDim) }
@@ -189,6 +200,14 @@ fun ChatScreen(
         AnimatedVisibility(visible = topScrolled) {
             HorizontalDivider(color = GoColors.GlassBorder)
         }
+        AnimatedVisibility(visible = ui.offline) {
+            Row(
+                Modifier.fillMaxWidth().background(GoColors.Surface2).padding(vertical = 5.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text("offline — replies will wait for a connection", fontSize = 11.sp, color = GoColors.TextDim)
+            }
+        }
 
         // ── messages ─────────────────────────────────────────────
         Box(Modifier.weight(1f)) {
@@ -202,18 +221,25 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(ui.messages, key = { it.id }) { m ->
+                        val task = ui.agentTasks.find { it.assistantMessageId == m.id }
                         Box(Modifier.animateItem()) {
                             MessageRow(
                                 m = m,
                                 isStreaming = m.id == ui.streamingId,
                                 streamText = if (m.id == ui.streamingId) ui.streamingText else "",
+                                task = task,
+                                steps = task?.let { ui.agentSteps[it.id] }.orEmpty(),
                                 onActions = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); actionsFor = m },
                                 onRetry = { vm.regenerate(m.id) },
                                 onCopied = { toast("Copied") },
+                                onApprove = { task?.let { vm.approvePlan(it.id) } },
+                                onReject = { task?.let { vm.rejectPlan(it.id) } },
+                                onResume = { task?.let { vm.resumeAgent(it.id) } },
+                                onCancelAgent = { vm.stop() },
                             )
                         }
                     }
-                    if (ui.thinking) item { ThinkingDots() }
+                    if (ui.thinking && ui.agentTasks.none { it.status == AgentTaskStatus.RUNNING.name }) item { ThinkingDots() }
                 }
             }
 
@@ -269,6 +295,17 @@ fun ChatScreen(
             border = androidx.compose.foundation.BorderStroke(1.dp, GoColors.GlassBorder),
         ) {
             Row(Modifier.padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
+                IconButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    vm.setAgentMode(!ui.agentMode)
+                    toast(if (ui.agentMode) "Agent off — direct replies" else "Agent on — plans, steps, verification")
+                }) {
+                    Icon(
+                        Icons.Default.PlayArrow, "agent mode",
+                        tint = if (ui.agentMode) GoColors.Accent else GoColors.TextFaint,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
                 IconButton(onClick = { filePicker.launch(arrayOf("text/*", "application/json", "application/xml", "*/*")) }) {
                     Icon(Icons.Default.AttachFile, "attach file", tint = GoColors.TextDim, modifier = Modifier.size(20.dp))
                 }
@@ -282,7 +319,12 @@ fun ChatScreen(
                     value = input,
                     onValueChange = { input = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message ${ui.model}", color = GoColors.TextFaint, fontSize = 14.5.sp) },
+                    placeholder = {
+                        Text(
+                            if (ui.agentMode) "Describe the task…" else "Message ${ui.model}",
+                            color = GoColors.TextFaint, fontSize = 14.5.sp,
+                        )
+                    },
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -470,12 +512,19 @@ private fun MessageRow(
     m: MessageEntity,
     isStreaming: Boolean,
     streamText: String,
+    task: AgentTask?,
+    steps: List<AgentStep>,
     onActions: () -> Unit,
     onRetry: () -> Unit,
     onCopied: () -> Unit,
+    onApprove: () -> Unit,
+    onReject: () -> Unit,
+    onResume: () -> Unit,
+    onCancelAgent: () -> Unit,
 ) {
     val isUser = m.role == "user"
     val clipboard = LocalClipboardManager.current
+    var expandRun by remember(m.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth()) {
         if (isUser) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -527,22 +576,38 @@ private fun MessageRow(
                     }
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             ) {
+                if (task != null) {
+                    if (task.status != AgentTaskStatus.DONE.name) {
+                        AgentTimeline(task, steps, onApprove, onReject, onResume, onCancelAgent)
+                        Spacer(Modifier.height(6.dp))
+                    } else if (steps.isNotEmpty()) {
+                        RunSummary(task, steps.size, expandRun) { expandRun = !expandRun }
+                        if (expandRun) {
+                            Spacer(Modifier.height(6.dp))
+                            AgentTimeline(task, steps, onApprove, onReject, onResume, onCancelAgent)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
                 when (m.status) {
                     "ERROR" -> {
-                        Text(
-                            if (m.content.isBlank()) "Couldn't get a reply." else m.content,
-                            color = GoColors.Error, style = MaterialTheme.typography.bodyMedium,
-                        )
-                        RetryChip("failed — tap to retry", onRetry)
+                        if (task == null || task.status != AgentTaskStatus.FAILED.name) {
+                            Text(
+                                if (m.content.isBlank()) "Couldn't get a reply." else m.content,
+                                color = GoColors.Error, style = MaterialTheme.typography.bodyMedium,
+                            )
+                            RetryChip("failed — tap to retry", onRetry)
+                        }
                     }
                     else -> {
                         val text = if (isStreaming) streamText else m.content
-                        if (text.isBlank() && isStreaming) ThinkingDots()
-                        else MarkdownText(text, onCopied = { onCopied() })
+                        val showText = text.isNotBlank() &&
+                            (task == null || task.phase == AgentPhase.REPORT.name || task.status == AgentTaskStatus.DONE.name)
+                        if (showText) MarkdownText(text, onCopied = { onCopied() })
                         if (m.status == "INTERRUPTED") RetryChip("stopped — tap to retry", onRetry)
                     }
                 }
-                if (!isStreaming && m.status != "ERROR") {
+                if (!isStreaming && m.status != "ERROR" && m.content.isNotBlank()) {
                     Row(
                         Modifier.padding(top = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -556,8 +621,8 @@ private fun MessageRow(
                         Text(
                             buildString {
                                 append(formatStamp(m.createdAt))
-                                if (m.tokensOut > 0 || m.latencyMs > 0)
-                                    append("  ·  ${m.tokensOut} tok · ${"%.1f".format(m.latencyMs / 1000f)}s")
+                                if (m.tokensOut > 0) append("  ·  ${m.tokensOut} tok")
+                                if (m.latencyMs > 0) append("  ·  ${"%.1f".format(m.latencyMs / 1000f)}s")
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = GoColors.TextFaint,

@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "conversations")
@@ -20,6 +22,9 @@ data class Conversation(
     val model: String,
     val createdAt: Long,
     val updatedAt: Long,
+    val pinned: Int = 0,
+    val archived: Int = 0,
+    val draft: String = "",
 )
 
 @Entity(
@@ -42,8 +47,20 @@ data class MessageEntity(
 
 @Dao
 interface ChatDao {
-    @Query("SELECT * FROM conversations ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM conversations ORDER BY pinned DESC, updatedAt DESC")
     fun conversations(): Flow<List<Conversation>>
+
+    @Query("UPDATE conversations SET pinned = :pinned WHERE id = :id")
+    suspend fun setPinned(id: String, pinned: Int)
+
+    @Query("UPDATE conversations SET archived = :archived WHERE id = :id")
+    suspend fun setArchived(id: String, archived: Int)
+
+    @Query("UPDATE conversations SET draft = :draft WHERE id = :id")
+    suspend fun setDraft(id: String, draft: String)
+
+    @Query("SELECT DISTINCT conversationId FROM messages WHERE content LIKE :pattern")
+    suspend fun conversationsMatching(pattern: String): List<String>
 
     @Query("SELECT * FROM conversations WHERE id = :id")
     suspend fun conversation(id: String): Conversation?
@@ -83,9 +100,68 @@ interface ChatDao {
 
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :convId")
     suspend fun messageCount(convId: String): Int
+
+    @Query("SELECT * FROM agent_tasks WHERE conversationId = :convId ORDER BY createdAt ASC")
+    fun agentTasks(convId: String): Flow<List<AgentTask>>
+
+    @Query("SELECT s.* FROM agent_steps s INNER JOIN agent_tasks t ON s.taskId = t.id WHERE t.conversationId = :convId ORDER BY s.taskId, s.seq")
+    fun agentStepsForConv(convId: String): Flow<List<AgentStep>>
+
+    @Query("SELECT * FROM agent_tasks WHERE id = :id")
+    suspend fun agentTask(id: String): AgentTask?
+
+    @Query("SELECT * FROM agent_tasks WHERE status IN ('RUNNING','AWAITING_APPROVAL')")
+    suspend fun liveAgentTasks(): List<AgentTask>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAgentTask(t: AgentTask)
+
+    @Query("DELETE FROM agent_tasks WHERE conversationId = :convId")
+    suspend fun deleteAgentTasks(convId: String)
+
+    @Query("SELECT * FROM agent_steps WHERE taskId = :taskId ORDER BY seq ASC")
+    fun agentSteps(taskId: String): Flow<List<AgentStep>>
+
+    @Query("SELECT * FROM agent_steps WHERE taskId = :taskId ORDER BY seq ASC")
+    suspend fun agentStepsOnce(taskId: String): List<AgentStep>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAgentStep(s: AgentStep)
+
+    @Query("DELETE FROM agent_steps WHERE taskId = :taskId")
+    suspend fun deleteAgentSteps(taskId: String)
 }
 
-@Database(entities = [Conversation::class, MessageEntity::class], version = 1, exportSchema = false)
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE conversations ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE conversations ADD COLUMN draft TEXT NOT NULL DEFAULT ''")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS agent_tasks (
+                id TEXT NOT NULL PRIMARY KEY, conversationId TEXT NOT NULL,
+                requestMessageId TEXT NOT NULL, assistantMessageId TEXT NOT NULL,
+                status TEXT NOT NULL, phase TEXT NOT NULL,
+                planSummary TEXT NOT NULL DEFAULT '', planApproved INTEGER NOT NULL DEFAULT 0,
+                error TEXT NOT NULL DEFAULT '', createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)"""
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_agent_tasks_conversationId ON agent_tasks(conversationId)")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS agent_steps (
+                id TEXT NOT NULL PRIMARY KEY, taskId TEXT NOT NULL, seq INTEGER NOT NULL,
+                title TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL,
+                output TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',
+                startedAt INTEGER NOT NULL DEFAULT 0, finishedAt INTEGER NOT NULL DEFAULT 0)"""
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_agent_steps_taskId ON agent_steps(taskId, seq)")
+    }
+}
+
+@Database(
+    entities = [Conversation::class, MessageEntity::class, AgentTask::class, AgentStep::class],
+    version = 2,
+    exportSchema = false,
+)
 abstract class ChatDatabase : RoomDatabase() {
     abstract fun dao(): ChatDao
 
@@ -98,7 +174,7 @@ abstract class ChatDatabase : RoomDatabase() {
                     context.applicationContext,
                     ChatDatabase::class.java,
                     "gochat.db"
-                ).fallbackToDestructiveMigration().build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2).fallbackToDestructiveMigration().build().also { instance = it }
             }
     }
 }

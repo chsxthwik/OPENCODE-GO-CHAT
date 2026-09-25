@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.github.chsxthwik.gochat.data.*
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -25,12 +26,21 @@ data class UiState(
     val systemPrompt: String = "",
     val temperature: Float = 0.7f,
     val contextLimit: Int = 20,
+    val agentMode: Boolean = false,
+    val agentTasks: List<AgentTask> = emptyList(),
+    val agentSteps: Map<String, List<AgentStep>> = emptyMap(),
+    val offline: Boolean = false,
+    val contextTokens: Int = 0,
+    val contextDropped: Int = 0,
+    val draft: String = "",
 )
 
 class ChatViewModel(
     private val settings: SettingsStore,
     private val api: GoApi,
     private val repo: ChatRepository,
+    private val connectivity: Connectivity,
+    private val engine: AgentEngine,
 ) : ViewModel() {
 
     private val _ui = MutableStateFlow(UiState())
@@ -40,6 +50,8 @@ class ChatViewModel(
     private var sessionId: String = ""
     private var sendJob: Job? = null
     private var messagesJob: Job? = null
+    private var agentJob: Job? = null
+    private val approvals = mutableMapOf<String, CompletableDeferred<Boolean>>()
 
     init {
         sessionId = ""
@@ -61,6 +73,15 @@ class ChatViewModel(
         viewModelScope.launch {
             settings.lastChatId.collect { id ->
                 if (id != null && _ui.value.currentId == null) openChat(id)
+            }
+        }
+        viewModelScope.launch {
+            connectivity.online.collect { on -> _ui.update { s -> s.copy(offline = !on) } }
+        }
+        viewModelScope.launch {
+            // runs left RUNNING by process death become resumable
+            repo.liveAgentTasks().forEach { t ->
+                repo.upsertAgentTask(t.copy(status = AgentTaskStatus.INTERRUPTED.name, updatedAt = System.currentTimeMillis()))
             }
         }
     }
@@ -125,20 +146,50 @@ class ChatViewModel(
 
     fun openChat(id: String) {
         messagesJob?.cancel()
-        _ui.update { it.copy(currentId = id, messages = emptyList(), streamingText = "", streamingId = null) }
+        _ui.update { it.copy(currentId = id, messages = emptyList(), streamingText = "", streamingId = null, agentTasks = emptyList(), agentSteps = emptyMap(), draft = "") }
         viewModelScope.launch { settings.setLastChat(id) }
         messagesJob = viewModelScope.launch {
-            repo.messages(id).collect { msgs ->
-                _ui.update { s -> s.copy(messages = msgs) }
+            launch {
+                repo.messages(id).collect { msgs ->
+                    val dropped = (msgs.size - _ui.value.contextLimit).coerceAtLeast(0)
+                    val window = if (dropped > 0) msgs.takeLast(_ui.value.contextLimit) else msgs
+                    _ui.update { s ->
+                        s.copy(
+                            messages = msgs,
+                            contextDropped = dropped,
+                            contextTokens = ContextBudget.estimateTokens(window, repo::parseAttachments),
+                        )
+                    }
+                }
             }
+            launch {
+                combine(repo.agentTasks(id), repo.agentStepsForConv(id)) { tasks, steps ->
+                    tasks to steps.groupBy { it.taskId }
+                }.collect { (tasks, steps) ->
+                    _ui.update { s -> s.copy(agentTasks = tasks, agentSteps = steps) }
+                }
+            }
+            repo.conversation(id)?.let { c -> _ui.update { s -> s.copy(draft = c.draft) } }
         }
     }
 
     fun closeChat() {
         messagesJob?.cancel()
-        _ui.update { it.copy(currentId = null, messages = emptyList()) }
+        _ui.update { it.copy(currentId = null, messages = emptyList(), agentTasks = emptyList(), agentSteps = emptyMap()) }
         viewModelScope.launch { settings.setLastChat(null) }
     }
+
+    fun saveDraft(text: String) {
+        val id = _ui.value.currentId ?: return
+        if (text == _ui.value.draft) return
+        _ui.update { it.copy(draft = text) }
+        viewModelScope.launch { repo.setDraft(id, text) }
+    }
+
+    fun setPinned(id: String, pinned: Boolean) = viewModelScope.launch { repo.setPinned(id, pinned) }
+    fun setArchived(id: String, archived: Boolean) = viewModelScope.launch { repo.setArchived(id, archived) }
+    suspend fun searchConversations(query: String): List<String> = repo.conversationsMatching(query)
+    fun setAgentMode(on: Boolean) = _ui.update { it.copy(agentMode = on) }
 
     fun deleteChat(id: String) {
         viewModelScope.launch {
@@ -157,6 +208,10 @@ class ChatViewModel(
         if (content.isEmpty() && attachments.isEmpty()) return
         if (_ui.value.sending) return
 
+        if (_ui.value.agentMode) {
+            sendAgent(convId, key, content, attachments)
+            return
+        }
         sendJob = viewModelScope.launch {
             val model = _ui.value.model
             repo.addMessage(convId, Role.USER, content, MessageStatus.DONE, attachments = attachments)
@@ -165,6 +220,104 @@ class ChatViewModel(
             _ui.update { it.copy(sending = true, thinking = true, streamingId = pending.id, streamingText = "") }
             streamInto(convId, pending.id, model, key)
         }
+    }
+
+    // ── agent runs ─────────────────────────────────────────────────
+
+    private fun sendAgent(convId: String, key: String, content: String, attachments: List<Attachment>) {
+        agentJob = viewModelScope.launch {
+            val model = _ui.value.model
+            val userMsg = repo.addMessage(convId, Role.USER, content, MessageStatus.DONE, attachments = attachments)
+            repo.maybeAutoTitle(convId, content)
+            val pending = repo.addMessage(convId, Role.ASSISTANT, "", MessageStatus.STREAMING, model = model)
+            val task = AgentTask(
+                id = java.util.UUID.randomUUID().toString(),
+                conversationId = convId,
+                requestMessageId = userMsg.id,
+                assistantMessageId = pending.id,
+                status = AgentTaskStatus.RUNNING.name,
+                phase = AgentPhase.UNDERSTAND.name,
+                createdAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(),
+            )
+            repo.upsertAgentTask(task)
+            _ui.update { it.copy(sending = true, thinking = true, streamingId = pending.id, streamingText = "") }
+            runAgent(task, pending.id, key)
+        }
+    }
+
+    private suspend fun runAgent(task: AgentTask, assistantId: String, key: String) {
+        val convId = task.conversationId
+        val reqMsg = repo.messagesOnce(convId).find { it.id == task.requestMessageId } ?: return
+        val history = repo.messagesOnce(convId)
+            .filter { it.id != reqMsg.id && it.id != assistantId }
+            .filter { it.status == MessageStatus.DONE.name }
+            .takeLast(_ui.value.contextLimit)
+        val model = _ui.value.models.find { it.id == _ui.value.model }
+            ?: GoModel(_ui.value.model, GoCatalog.endpointFor(_ui.value.model), GoCatalog.supportsVision(_ui.value.model))
+        val buf = StringBuilder()
+        try {
+            engine.execute(
+                AgentEngine.Request(
+                    convId = convId,
+                    requestMessageId = reqMsg.id,
+                    assistantMessageId = assistantId,
+                    requestText = reqMsg.content,
+                    attachments = repo.parseAttachments(reqMsg.attachmentsJson),
+                    history = history,
+                    model = model,
+                    apiKey = key,
+                    sessionId = sessionId,
+                    systemPrompt = _ui.value.systemPrompt,
+                    temperature = _ui.value.temperature,
+                ),
+                taskId = task.id,
+                awaitApproval = {
+                    val gate = CompletableDeferred<Boolean>()
+                    approvals[task.id] = gate
+                    gate.await()
+                },
+                onReportDelta = { d ->
+                    buf.append(d)
+                    _ui.update { it.copy(thinking = false, streamingText = buf.toString()) }
+                },
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            repo.finishMessage(assistantId, buf.toString(), MessageStatus.INTERRUPTED, 0, 0, 0)
+            throw e
+        } finally {
+            approvals.remove(task.id)
+            val finalTask = repo.agentTask(task.id)
+            if (finalTask?.status == AgentTaskStatus.FAILED.name) {
+                repo.finishMessage(assistantId, buf.toString().ifBlank { finalTask.error }, MessageStatus.ERROR, 0, 0, 0)
+            } else if (finalTask?.status == AgentTaskStatus.CANCELLED.name) {
+                repo.deleteMessage(assistantId)
+            }
+            _ui.update { it.copy(sending = false, thinking = false, streamingId = null, streamingText = "") }
+        }
+    }
+
+    fun approvePlan(taskId: String) {
+        approvals[taskId]?.complete(true)
+    }
+
+    fun rejectPlan(taskId: String) {
+        approvals[taskId]?.complete(false)
+    }
+
+    fun resumeAgent(taskId: String) {
+        if (_ui.value.sending) return
+        val key = apiKey ?: return
+        agentJob = viewModelScope.launch {
+            val task = repo.agentTask(taskId) ?: return@launch
+            _ui.update { it.copy(sending = true, thinking = true, streamingId = task.assistantMessageId, streamingText = "") }
+            runAgent(task, task.assistantMessageId, key)
+        }
+    }
+
+    fun stopAgent() {
+        agentJob?.cancel()
+        agentJob = null
     }
 
     fun regenerate(assistantMsgId: String) {
@@ -200,8 +353,10 @@ class ChatViewModel(
     }
 
     fun stop() {
-        sendJob?.cancel()
-        sendJob = null
+        if (agentJob?.isActive == true) stopAgent() else {
+            sendJob?.cancel()
+            sendJob = null
+        }
     }
 
     private suspend fun streamInto(convId: String, msgId: String, modelId: String, key: String) {
@@ -269,7 +424,7 @@ class ChatViewModel(
         fun factory(app: GoChatApp) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ChatViewModel(app.settings, app.api, app.repo) as T
+                ChatViewModel(app.settings, app.api, app.repo, app.connectivity, app.agentEngine) as T
         }
     }
 }

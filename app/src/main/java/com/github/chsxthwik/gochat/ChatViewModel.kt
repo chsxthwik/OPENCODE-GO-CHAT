@@ -33,8 +33,10 @@ data class UiState(
     val contextTokens: Int = 0,
     val contextDropped: Int = 0,
     val draft: String = "",
+    val earlierCount: Int = 0,
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ChatViewModel(
     private val settings: SettingsStore,
     private val api: GoApi,
@@ -50,6 +52,7 @@ class ChatViewModel(
     private var sessionId: String = ""
     private var sendJob: Job? = null
     private var messagesJob: Job? = null
+    private val historyWindow = MutableStateFlow(HISTORY_PAGE)
     private var agentJob: Job? = null
     private val approvals = mutableMapOf<String, CompletableDeferred<Boolean>>()
 
@@ -152,16 +155,19 @@ class ChatViewModel(
 
     fun openChat(id: String) {
         messagesJob?.cancel()
-        _ui.update { it.copy(currentId = id, messages = emptyList(), streamingText = "", streamingId = null, agentTasks = emptyList(), agentSteps = emptyMap(), draft = "") }
+        historyWindow.value = HISTORY_PAGE
+        _ui.update { it.copy(currentId = id, messages = emptyList(), streamingText = "", streamingId = null, agentTasks = emptyList(), agentSteps = emptyMap(), draft = "", earlierCount = 0) }
         viewModelScope.launch { settings.setLastChat(id) }
         messagesJob = viewModelScope.launch {
             launch {
-                repo.messages(id).collect { msgs ->
-                    val dropped = (msgs.size - _ui.value.contextLimit).coerceAtLeast(0)
+                historyWindow.flatMapLatest { repo.messagesTail(id, it) }.collect { msgs ->
+                    val total = repo.messageCount(id)
+                    val dropped = (total - _ui.value.contextLimit).coerceAtLeast(0)
                     val window = if (dropped > 0) msgs.takeLast(_ui.value.contextLimit) else msgs
                     _ui.update { s ->
                         s.copy(
                             messages = msgs,
+                            earlierCount = (total - msgs.size).coerceAtLeast(0),
                             contextDropped = dropped,
                             contextTokens = ContextBudget.estimateTokens(window, repo::parseAttachments),
                         )
@@ -181,8 +187,14 @@ class ChatViewModel(
 
     fun closeChat() {
         messagesJob?.cancel()
-        _ui.update { it.copy(currentId = null, messages = emptyList(), agentTasks = emptyList(), agentSteps = emptyMap()) }
+        historyWindow.value = HISTORY_PAGE
+        _ui.update { it.copy(currentId = null, messages = emptyList(), agentTasks = emptyList(), agentSteps = emptyMap(), earlierCount = 0) }
         viewModelScope.launch { settings.setLastChat(null) }
+    }
+
+    /** Pull the next page of older messages into the display window. */
+    fun loadEarlier() {
+        if (_ui.value.earlierCount > 0) historyWindow.value += HISTORY_PAGE
     }
 
     fun saveDraft(text: String) {
@@ -387,15 +399,22 @@ class ChatViewModel(
         }
 
         val buf = StringBuilder()
+        var lastEmit = 0L
         try {
             api.streamChat(key, sessionId, goModel, wire, _ui.value.systemPrompt, _ui.value.temperature)
                 .collect { ev ->
                     when (ev) {
                         is ChatEvent.Delta -> {
                             buf.append(ev.text)
-                            _ui.update { it.copy(thinking = false, streamingText = buf.toString()) }
+                            // throttle recomposition to ~16/s — token bursts arrive far faster
+                            val now = System.currentTimeMillis()
+                            if (now - lastEmit >= EMIT_MS) {
+                                lastEmit = now
+                                _ui.update { it.copy(thinking = false, streamingText = buf.toString()) }
+                            }
                         }
                         is ChatEvent.Done -> {
+                            _ui.update { it.copy(streamingText = buf.toString()) }
                             repo.finishMessage(
                                 msgId, buf.toString(), MessageStatus.DONE,
                                 ev.tokensIn, ev.tokensOut,
@@ -427,6 +446,9 @@ class ChatViewModel(
     }
 
     companion object {
+        private const val HISTORY_PAGE = 60
+        private const val EMIT_MS = 60L
+
         fun factory(app: GoChatApp) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =

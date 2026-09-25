@@ -2,6 +2,7 @@ package com.github.chsxthwik.gochat.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -14,6 +15,11 @@ class ChatRepository(private val db: ChatDatabase) {
     fun conversations(): Flow<List<Conversation>> = dao.conversations()
     fun messages(convId: String): Flow<List<MessageEntity>> = dao.messages(convId)
     suspend fun messagesOnce(convId: String) = dao.messagesOnce(convId)
+    suspend fun messageCount(convId: String) = dao.messageCount(convId)
+
+    /** Newest [limit] messages, oldest-first — display window for long conversations. */
+    fun messagesTail(convId: String, limit: Int): Flow<List<MessageEntity>> =
+        dao.messagesTail(convId, limit).map { it.reversed() }
     suspend fun conversation(id: String) = dao.conversation(id)
 
     suspend fun createConversation(model: String): Conversation {

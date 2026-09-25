@@ -484,7 +484,8 @@ class ChatViewModel(
                         }
                         is ChatEvent.Failure -> {
                             val status = if (buf.isNotEmpty()) MessageStatus.INTERRUPTED else MessageStatus.ERROR
-                            repo.finishMessage(msgId, buf.toString(), status, 0, 0, System.currentTimeMillis() - started)
+                            val text = buf.toString().ifBlank { ev.error.friendly() }
+                            repo.finishMessage(msgId, text, status, 0, 0, System.currentTimeMillis() - started)
                             _ui.update { it.copy(streamingText = "") }
                         }
                     }
@@ -494,6 +495,11 @@ class ChatViewModel(
             val status = if (buf.isNotEmpty()) MessageStatus.INTERRUPTED else MessageStatus.ERROR
             repo.finishMessage(msgId, buf.toString(), status, 0, 0, System.currentTimeMillis() - started)
             throw e
+        } catch (e: Exception) {
+            // never let a stream failure take the process down
+            val status = if (buf.isNotEmpty()) MessageStatus.INTERRUPTED else MessageStatus.ERROR
+            val text = buf.toString().ifBlank { "Request failed — try again" }
+            repo.finishMessage(msgId, text, status, 0, 0, System.currentTimeMillis() - started)
         } finally {
             _ui.update { it.copy(sending = false, thinking = false, streamingId = null, streamingText = "") }
         }

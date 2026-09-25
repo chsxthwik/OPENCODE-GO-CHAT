@@ -227,6 +227,13 @@ class ChatViewModel(
         viewModelScope.launch { repo.setConversationPrompt(id, prompt.trim()) }
     }
 
+    fun renameChat(title: String) {
+        val id = _ui.value.currentId ?: return
+        val t = title.trim()
+        if (t.isEmpty()) return
+        viewModelScope.launch { repo.renameConversation(id, t) }
+    }
+
     private var lastDeleted: ConversationSnapshot? = null
 
     fun deleteChat(id: String) {

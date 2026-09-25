@@ -95,6 +95,8 @@ fun ChatScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var promptDialog by remember { mutableStateOf(false) }
     var promptText by remember { mutableStateOf("") }
+    var renameDialog by remember { mutableStateOf(false) }
+    var renameText by remember { mutableStateOf("") }
     var chatSearch by remember { mutableStateOf<String?>(null) }
     var matchPos by remember { mutableIntStateOf(0) }
     val searchFocus = remember { FocusRequester() }
@@ -256,6 +258,11 @@ fun ChatScreen(
                     onClick = { menuOpen = false; promptText = conv?.systemPrompt.orEmpty(); promptDialog = true },
                 )
                 DropdownMenuItem(
+                    text = { Text("Rename") },
+                    leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
+                    onClick = { menuOpen = false; renameText = conv?.title.orEmpty(); renameDialog = true },
+                )
+                DropdownMenuItem(
                     text = { Text("Export chat") },
                     leadingIcon = { Icon(Icons.Default.Share, null) },
                     onClick = {
@@ -311,6 +318,40 @@ fun ChatScreen(
                                 TextButton(onClick = { vm.setChatSystemPrompt(""); promptDialog = false }) { Text("Clear", color = GoColors.Error) }
                             }
                             TextButton(onClick = { vm.setChatSystemPrompt(promptText); promptDialog = false }) { Text("Save") }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (renameDialog) {
+            BasicAlertDialog(onDismissRequest = { renameDialog = false }) {
+                Surface(
+                    shape = RoundedCornerShape(GoShape.M), color = GoColors.Surface,
+                    tonalElevation = 2.dp,
+                ) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text("Rename chat", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = renameText,
+                            onValueChange = { renameText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            textStyle = GoType.Body.copy(color = GoColors.Text),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoColors.Accent.copy(alpha = 0.5f),
+                                unfocusedBorderColor = GoColors.Line,
+                            ),
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { renameDialog = false }) { Text("Cancel") }
+                            TextButton(
+                                onClick = { vm.renameChat(renameText); renameDialog = false },
+                                enabled = renameText.isNotBlank(),
+                            ) { Text("Save") }
                         }
                     }
                 }

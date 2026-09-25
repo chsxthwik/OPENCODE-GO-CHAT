@@ -1,6 +1,7 @@
 package com.github.chsxthwik.gochat.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -27,6 +28,7 @@ class SettingsStore(private val context: Context) {
         val CONTEXT_LIMIT = intPreferencesKey("context_limit")
         val LAST_CHAT = stringPreferencesKey("last_chat_id")
         val GATEWAY_BASE = stringPreferencesKey("gateway_base")
+        val NOTIF_ASKED = booleanPreferencesKey("notif_asked")
         val DEFAULT_MODEL = "glm-5.3-flash"
     }
 
@@ -38,6 +40,7 @@ class SettingsStore(private val context: Context) {
     val lastChatId: Flow<String?> = context.dataStore.data.map { it[K.LAST_CHAT] }
     val modelCacheJson: Flow<String?> = context.dataStore.data.map { it[K.MODEL_CACHE] }
     val gatewayBase: Flow<String> = context.dataStore.data.map { it[K.GATEWAY_BASE] ?: DEFAULT_GATEWAY_BASE }
+    val notifAsked: Flow<Boolean> = context.dataStore.data.map { it[K.NOTIF_ASKED] ?: false }
 
     fun apiKey(): Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[K.ENCRYPTED_KEY]?.let { KeyVault.decrypt(it) }
@@ -75,6 +78,10 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setGatewayBase(url: String) {
         context.dataStore.edit { it[K.GATEWAY_BASE] = url }
+    }
+
+    suspend fun markNotifAsked() {
+        context.dataStore.edit { it[K.NOTIF_ASKED] = true }
     }
 
     suspend fun setLastChat(id: String?) {

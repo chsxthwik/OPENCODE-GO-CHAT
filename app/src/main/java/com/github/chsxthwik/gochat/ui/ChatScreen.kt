@@ -94,6 +94,7 @@ fun ChatScreen(
     var chatSearch by remember { mutableStateOf<String?>(null) }
     var matchPos by remember { mutableIntStateOf(0) }
     val searchFocus = remember { FocusRequester() }
+    val composerFocus = remember { FocusRequester() }
 
     val conv = ui.conversations.find { it.id == ui.currentId }
     val streaming = ui.sending
@@ -430,7 +431,7 @@ fun ChatScreen(
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).focusRequester(composerFocus),
                     placeholder = {
                         Text(
                             if (ui.agentMode) "Describe the task…" else "Message ${ui.model}",
@@ -567,6 +568,12 @@ fun ChatScreen(
                         type = "text/plain"; putExtra(Intent.EXTRA_TEXT, m.content)
                     }
                     ctx.startActivity(Intent.createChooser(send, "Share")); actionsFor = null
+                }
+                ActionItem(Icons.Default.FormatQuote, "Quote") {
+                    val excerpt = m.content.trim().lines().take(4).joinToString("\n").take(280)
+                    input = "> " + excerpt.replace("\n", "\n> ") + "\n\n" + input
+                    actionsFor = null
+                    scope.launch { delay(80); composerFocus.requestFocus(); keyboard?.show() }
                 }
                 if (m.role == "user") {
                     ActionItem(Icons.Default.Edit, "Edit & resend") {

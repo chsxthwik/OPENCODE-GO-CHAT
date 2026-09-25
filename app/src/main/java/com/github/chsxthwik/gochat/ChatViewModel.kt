@@ -209,11 +209,20 @@ class ChatViewModel(
     suspend fun searchConversations(query: String): List<String> = repo.conversationsMatching(query)
     fun setAgentMode(on: Boolean) = _ui.update { it.copy(agentMode = on) }
 
+    private var lastDeleted: ConversationSnapshot? = null
+
     fun deleteChat(id: String) {
         viewModelScope.launch {
+            lastDeleted = repo.snapshotConversation(id)
             repo.deleteConversation(id)
             if (_ui.value.currentId == id) closeChat()
         }
+    }
+
+    fun undoDelete() {
+        val s = lastDeleted ?: return
+        lastDeleted = null
+        viewModelScope.launch { repo.restoreConversation(s) }
     }
 
     fun renameChat(id: String, title: String) =

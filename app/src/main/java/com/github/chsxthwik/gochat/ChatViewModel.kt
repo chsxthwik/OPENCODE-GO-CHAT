@@ -40,6 +40,7 @@ data class UiState(
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ChatViewModel(
+    private val app: GoChatApp,
     private val settings: SettingsStore,
     private val api: GoApi,
     private val repo: ChatRepository,
@@ -361,8 +362,16 @@ class ChatViewModel(
             } else if (finalTask?.status == AgentTaskStatus.CANCELLED.name) {
                 repo.deleteMessage(assistantId)
             }
+            if (finalTask?.status == AgentTaskStatus.DONE.name) notifyReply(convId, buf.toString())
             _ui.update { it.copy(sending = false, thinking = false, streamingId = null, streamingText = "") }
         }
+    }
+
+    private fun notifyReply(convId: String, text: String) {
+        if (app.foreground || text.isBlank()) return
+        val title = _ui.value.conversations.firstOrNull { it.id == convId }?.title ?: "GoChat"
+        val preview = text.lineSequence().firstOrNull { it.isNotBlank() }?.take(140) ?: return
+        app.notifier.reply(convId, title, preview)
     }
 
     fun approvePlan(taskId: String) {
@@ -471,6 +480,7 @@ class ChatViewModel(
                                 ev.tokensIn, ev.tokensOut,
                                 System.currentTimeMillis() - started,
                             )
+                            notifyReply(convId, buf.toString())
                         }
                         is ChatEvent.Failure -> {
                             val status = if (buf.isNotEmpty()) MessageStatus.INTERRUPTED else MessageStatus.ERROR
@@ -503,7 +513,7 @@ class ChatViewModel(
         fun factory(app: GoChatApp) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                ChatViewModel(app.settings, app.api, app.repo, app.connectivity, app.agentEngine) as T
+                ChatViewModel(app, app.settings, app.api, app.repo, app.connectivity, app.agentEngine) as T
         }
     }
 }

@@ -24,6 +24,8 @@ fun SettingsSheet(
     onContextLimit: (Int) -> Unit,
     onRefreshModels: () -> Unit,
     onDisconnect: () -> Unit,
+    onGatewayBase: (String) -> Boolean,
+    onGatewayReset: () -> Unit,
     onClose: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onClose, containerColor = GoColors.Surface) {
@@ -82,6 +84,35 @@ fun SettingsSheet(
                 }
                 TextButton(onClick = onRefreshModels) { Text("Refresh", color = GoColors.Accent) }
             }
+
+            Spacer(Modifier.height(20.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Gateway", style = MaterialTheme.typography.labelMedium, color = GoColors.TextDim, modifier = Modifier.weight(1f))
+                if (ui.gatewayBase.isNotBlank() && ui.gatewayBase != "https://opencode.ai/zen/go/v1") {
+                    TextButton(onClick = onGatewayReset) { Text("Reset", color = GoColors.Accent) }
+                }
+            }
+            var gateway by remember(ui.gatewayBase) { mutableStateOf(ui.gatewayBase) }
+            var gatewayError by remember { mutableStateOf(false) }
+            OutlinedTextField(
+                value = gateway,
+                onValueChange = { gateway = it; gatewayError = false },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                isError = gatewayError,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                textStyle = GoType.MonoDim.copy(color = GoColors.Text),
+                trailingIcon = {
+                    if (gateway != ui.gatewayBase)
+                        TextButton(onClick = { gatewayError = !onGatewayBase(gateway) }) { Text("Save", color = GoColors.Accent) }
+                },
+            )
+            Text(
+                if (gatewayError) "not a valid http(s) URL"
+                else "https recommended — http only for trusted local endpoints",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (gatewayError) GoColors.Error else GoColors.TextFaint,
+            )
 
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = GoColors.Line)

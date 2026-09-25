@@ -35,6 +35,7 @@ data class UiState(
     val draft: String = "",
     val earlierCount: Int = 0,
     val pendingChatSearch: String? = null,
+    val gatewayBase: String = "",
 )
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -68,6 +69,12 @@ class ChatViewModel(
         }
         viewModelScope.launch { settings.temperature.collect { t -> _ui.update { s -> s.copy(temperature = t) } } }
         viewModelScope.launch { settings.contextLimit.collect { n -> _ui.update { s -> s.copy(contextLimit = n) } } }
+        viewModelScope.launch {
+            settings.gatewayBase.collect { b ->
+                api.base = b
+                _ui.update { s -> s.copy(gatewayBase = b) }
+            }
+        }
         viewModelScope.launch { settings.model.collect { m -> _ui.update { s -> s.copy(model = m) } } }
         viewModelScope.launch {
             repo.conversations().collect { list ->
@@ -144,6 +151,15 @@ class ChatViewModel(
     }
 
     fun setSystemPrompt(p: String) = viewModelScope.launch { settings.setSystemPrompt(p) }
+
+    /** Save a custom gateway base; returns false when the URL can't be normalized. */
+    fun setGatewayBase(raw: String): Boolean {
+        val url = normalizeGatewayBase(raw) ?: return false
+        viewModelScope.launch { settings.setGatewayBase(url) }
+        return true
+    }
+
+    fun resetGatewayBase() = viewModelScope.launch { settings.setGatewayBase(DEFAULT_GATEWAY_BASE) }
     fun setTemperature(t: Float) = viewModelScope.launch { settings.setTemperature(t) }
     fun setContextLimit(n: Int) = viewModelScope.launch { settings.setContextLimit(n) }
 

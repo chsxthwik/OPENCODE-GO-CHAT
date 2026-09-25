@@ -198,6 +198,10 @@ class ChatViewModel(
         if (_ui.value.earlierCount > 0) historyWindow.value += HISTORY_PAGE
     }
 
+    fun loadAllHistory() {
+        if (_ui.value.earlierCount > 0) historyWindow.value = Int.MAX_VALUE
+    }
+
     fun saveDraft(text: String) {
         val id = _ui.value.currentId ?: return
         if (text == _ui.value.draft) return
@@ -368,16 +372,17 @@ class ChatViewModel(
         agentJob = null
     }
 
-    fun regenerate(assistantMsgId: String) {
+    fun regenerate(assistantMsgId: String, modelId: String? = null) {
         val convId = _ui.value.currentId ?: return
         if (_ui.value.sending) return
         sendJob = viewModelScope.launch {
             val msgs = repo.messagesOnce(convId)
             val target = msgs.find { it.id == assistantMsgId } ?: return@launch
+            val useModel = modelId ?: target.model.ifBlank { _ui.value.model }
             repo.deleteMessage(assistantMsgId)
-            val pending = repo.addMessage(convId, Role.ASSISTANT, "", MessageStatus.STREAMING, model = target.model.ifBlank { _ui.value.model })
+            val pending = repo.addMessage(convId, Role.ASSISTANT, "", MessageStatus.STREAMING, model = useModel)
             _ui.update { it.copy(sending = true, thinking = true, streamingId = pending.id, streamingText = "") }
-            streamInto(convId, pending.id, _ui.value.model, apiKey ?: return@launch)
+            streamInto(convId, pending.id, useModel, apiKey ?: return@launch)
         }
     }
 

@@ -34,6 +34,7 @@ import com.github.chsxthwik.gochat.ui.theme.GoType
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +45,7 @@ fun ChatListScreen(
     onNew: () -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onUndoDelete: () -> Unit,
     onPin: (String, Boolean) -> Unit,
     onArchive: (String, Boolean) -> Unit,
     searchMessages: suspend (String) -> List<String>,
@@ -57,6 +59,8 @@ fun ChatListScreen(
     var deleting by remember { mutableStateOf<Conversation?>(null) }
     var showArchived by remember { mutableStateOf(false) }
     var msgMatches by remember { mutableStateOf<Set<String>?>(null) }
+    val snack = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(query) {
         msgMatches = if (query.trim().length >= 3) searchMessages(query.trim()).toSet() else null
@@ -69,7 +73,8 @@ fun ChatListScreen(
     }
     val archivedCount = conversations.count { it.archived != 0 }
 
-    Column(Modifier.fillMaxSize().background(GoColors.Bg)) {
+    Box(Modifier.fillMaxSize().background(GoColors.Bg)) {
+    Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -166,6 +171,8 @@ fun ChatListScreen(
             }
         }
     }
+    SnackbarHost(snack, Modifier.align(Alignment.BottomCenter))
+    }
 
     if (menuFor != null) {
         val c = menuFor!!
@@ -202,7 +209,13 @@ fun ChatListScreen(
             title = { Text("Delete chat?") },
             text = { Text("\"${deleting!!.title}\" and its messages are removed from this device.", color = GoColors.TextDim) },
             confirmButton = {
-                TextButton(onClick = { onDelete(deleting!!.id); deleting = null }) { Text("Delete", color = GoColors.Error) }
+                TextButton(onClick = {
+                    onDelete(deleting!!.id); deleting = null
+                    scope.launch {
+                        val r = snack.showSnackbar("Chat deleted", actionLabel = "Undo", duration = SnackbarDuration.Short)
+                        if (r == SnackbarResult.ActionPerformed) onUndoDelete()
+                    }
+                }) { Text("Delete", color = GoColors.Error) }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )

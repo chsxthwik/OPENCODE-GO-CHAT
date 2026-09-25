@@ -8,6 +8,13 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.UUID
 
+data class ConversationSnapshot(
+    val conversation: Conversation,
+    val messages: List<MessageEntity>,
+    val tasks: List<AgentTask>,
+    val steps: Map<String, List<AgentStep>>,
+)
+
 class ChatRepository(private val db: ChatDatabase) {
     private val dao = db.dao()
     private val json = Json { ignoreUnknownKeys = true }
@@ -42,6 +49,25 @@ class ChatRepository(private val db: ChatDatabase) {
         dao.deleteAgentTasks(id)
         dao.clearMessages(id)
         dao.deleteConversation(id)
+    }
+
+    /** Full snapshot for undoing a deletion — caller holds it, we just read/write. */
+    suspend fun snapshotConversation(id: String): ConversationSnapshot? {
+        val conv = dao.conversation(id) ?: return null
+        val tasks = dao.agentTasks(id).first()
+        return ConversationSnapshot(
+            conversation = conv,
+            messages = dao.messagesOnce(id),
+            tasks = tasks,
+            steps = tasks.associate { it.id to dao.agentStepsOnce(it.id) },
+        )
+    }
+
+    suspend fun restoreConversation(s: ConversationSnapshot) {
+        dao.upsertConversation(s.conversation)
+        s.messages.forEach { dao.upsertMessage(it) }
+        s.tasks.forEach { dao.upsertAgentTask(it) }
+        s.steps.values.flatten().forEach { dao.upsertAgentStep(it) }
     }
 
     suspend fun addMessage(

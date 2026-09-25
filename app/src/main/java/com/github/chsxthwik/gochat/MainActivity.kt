@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                                     onNew = { vm.newChat(); scope.launch { drawer.close() } },
                                     onRename = vm::renameChat,
                                     onDelete = vm::deleteChat,
+                                    onUndoDelete = vm::undoDelete,
                                     onPin = vm::setPinned,
                                     onArchive = vm::setArchived,
                                     searchMessages = vm::searchConversations,

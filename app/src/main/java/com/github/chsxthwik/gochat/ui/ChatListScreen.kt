@@ -13,7 +13,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +44,9 @@ fun ChatListScreen(
     onNew: () -> Unit,
     onRename: (String, String) -> Unit,
     onDelete: (String) -> Unit,
+    onPin: (String, Boolean) -> Unit,
+    onArchive: (String, Boolean) -> Unit,
+    searchMessages: suspend (String) -> List<String>,
     onSettings: () -> Unit,
 ) {
     val haptic = LocalHapticFeedback.current
@@ -49,11 +54,20 @@ fun ChatListScreen(
     var menuFor by remember { mutableStateOf<Conversation?>(null) }
     var renaming by remember { mutableStateOf<Conversation?>(null) }
     var renameText by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf<Conversation?>(null) }
+    var showArchived by remember { mutableStateOf(false) }
+    var msgMatches by remember { mutableStateOf<Set<String>?>(null) }
 
-    val shown = remember(conversations, query) {
-        if (query.isBlank()) conversations
-        else conversations.filter { it.title.contains(query, true) }
+    LaunchedEffect(query) {
+        msgMatches = if (query.trim().length >= 3) searchMessages(query.trim()).toSet() else null
     }
+
+    val shown = remember(conversations, query, msgMatches, showArchived) {
+        val active = if (showArchived) conversations else conversations.filter { it.archived == 0 }
+        if (query.isBlank()) active
+        else active.filter { it.title.contains(query, true) || msgMatches?.contains(it.id) == true }
+    }
+    val archivedCount = conversations.count { it.archived != 0 }
 
     Column(Modifier.fillMaxSize().background(GoColors.Bg)) {
         Row(
@@ -94,7 +108,7 @@ fun ChatListScreen(
             }
         }
 
-        if (shown.isEmpty()) {
+        if (shown.isEmpty() && archivedCount == 0) {
             Column(
                 Modifier.fillMaxWidth().weight(1f).padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -116,37 +130,36 @@ fun ChatListScreen(
             }
         }
         LazyColumn(Modifier.fillMaxSize()) {
-            items(shown, key = { it.id }) { conv ->
-                val active = conv.id == currentId
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 2.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (active) GoColors.Surface2 else GoColors.Bg)
-                        .combinedClickable(
-                            onClick = { onOpen(conv.id) },
-                            onLongClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                menuFor = conv
-                            },
-                        )
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
+            val pinned = shown.filter { it.pinned != 0 }
+            val rest = shown.filter { it.pinned == 0 }
+            if (pinned.isNotEmpty()) {
+                item { SectionLabel("pinned") }
+            }
+            items(pinned, key = { it.id }) { conv ->
+                ChatRow(conv, currentId, haptic, onOpen, onMenu = { menuFor = conv })
+            }
+            if (pinned.isNotEmpty() && rest.isNotEmpty()) {
+                item { SectionLabel("recent") }
+            }
+            items(rest, key = { it.id }) { conv ->
+                ChatRow(conv, currentId, haptic, onOpen, onMenu = { menuFor = conv })
+            }
+            if (archivedCount > 0) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(8.dp)).clickable { showArchived = !showArchived }
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            conv.title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (active) GoColors.Text else GoColors.TextDim,
-                            fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
-                            fontSize = 14.5.sp,
+                            "archived ($archivedCount)",
+                            fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = GoColors.TextFaint,
                         )
+                        Spacer(Modifier.weight(1f))
                         Text(
-                            formatTime(conv.updatedAt) + " · " + conv.model,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = GoColors.TextFaint,
+                            if (showArchived) "hide" else "show",
+                            fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = GoColors.Accent,
                         )
                     }
                 }
@@ -155,17 +168,38 @@ fun ChatListScreen(
     }
 
     if (menuFor != null) {
+        val c = menuFor!!
         AlertDialog(onDismissRequest = { menuFor = null }) {
             Column {
-                TextButton(onClick = { renaming = menuFor; renameText = menuFor!!.title; menuFor = null }) {
+                TextButton(onClick = { renaming = c; renameText = c.title; menuFor = null }) {
                     Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Rename")
                 }
-                TextButton(onClick = { onDelete(menuFor!!.id); menuFor = null }) {
+                TextButton(onClick = { onPin(c.id, c.pinned == 0); menuFor = null }) {
+                    Icon(Icons.Default.Star, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                    Text(if (c.pinned != 0) "Unpin" else "Pin")
+                }
+                TextButton(onClick = { onArchive(c.id, c.archived == 0); menuFor = null }) {
+                    Icon(Icons.Default.DateRange, null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(8.dp))
+                    Text(if (c.archived != 0) "Unarchive" else "Archive")
+                }
+                TextButton(onClick = { deleting = c; menuFor = null }) {
                     Icon(Icons.Default.Delete, null, tint = GoColors.Error, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp)); Text("Delete", color = GoColors.Error)
                 }
             }
         }
+    }
+
+    if (deleting != null) {
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete chat?") },
+            text = { Text("\"${deleting!!.title}\" and its messages are removed from this device.", color = GoColors.TextDim) },
+            confirmButton = {
+                TextButton(onClick = { onDelete(deleting!!.id); deleting = null }) { Text("Delete", color = GoColors.Error) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
+        )
     }
 
     if (renaming != null) {
@@ -185,6 +219,65 @@ fun ChatListScreen(
             },
         )
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChatRow(
+    conv: Conversation,
+    currentId: String?,
+    haptic: androidx.compose.ui.hapticfeedback.HapticFeedback,
+    onOpen: (String) -> Unit,
+    onMenu: (Conversation) -> Unit,
+) {
+    val active = conv.id == currentId
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (active) GoColors.Surface2 else GoColors.Bg)
+            .combinedClickable(
+                onClick = { onOpen(conv.id) },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onMenu(conv)
+                },
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (conv.pinned != 0) {
+            Icon(Icons.Default.Star, "pinned", tint = GoColors.Accent, modifier = Modifier.size(10.dp))
+            Spacer(Modifier.width(6.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                conv.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (active) GoColors.Text else GoColors.TextDim,
+                fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                fontSize = 14.5.sp,
+            )
+            Text(
+                formatTime(conv.updatedAt) + " · " + conv.model,
+                style = MaterialTheme.typography.labelSmall,
+                color = GoColors.TextFaint,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp,
+        color = GoColors.TextFaint,
+        modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+    )
 }
 
 private fun formatTime(ts: Long): String {

@@ -1,6 +1,7 @@
 package com.github.chsxthwik.gochat.data
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -24,7 +25,15 @@ class ChatRepository(private val db: ChatDatabase) {
 
     suspend fun renameConversation(id: String, title: String) = dao.renameConversation(id, title)
 
+    suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, if (pinned) 1 else 0)
+    suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, if (archived) 1 else 0)
+    suspend fun setDraft(id: String, draft: String) = dao.setDraft(id, draft)
+    suspend fun conversationsMatching(query: String): List<String> =
+        dao.conversationsMatching("%" + query.replace("%", "").replace("_", "") + "%")
+
     suspend fun deleteConversation(id: String) {
+        dao.agentTasks(id).first().forEach { dao.deleteAgentSteps(it.id) }
+        dao.deleteAgentTasks(id)
         dao.clearMessages(id)
         dao.deleteConversation(id)
     }
@@ -62,6 +71,16 @@ class ChatRepository(private val db: ChatDatabase) {
 
     suspend fun deleteFrom(convId: String, fromTs: Long) = dao.deleteFrom(convId, fromTs)
     suspend fun deleteMessage(id: String) = dao.deleteMessage(id)
+
+    // ── agent tasks ────────────────────────────────────────────────
+    fun agentTasks(convId: String) = dao.agentTasks(convId)
+    fun agentStepsForConv(convId: String) = dao.agentStepsForConv(convId)
+    fun agentSteps(taskId: String) = dao.agentSteps(taskId)
+    suspend fun agentStepsOnce(taskId: String) = dao.agentStepsOnce(taskId)
+    suspend fun agentTask(id: String) = dao.agentTask(id)
+    suspend fun liveAgentTasks() = dao.liveAgentTasks()
+    suspend fun upsertAgentTask(t: AgentTask) = dao.upsertAgentTask(t)
+    suspend fun upsertAgentStep(s: AgentStep) = dao.upsertAgentStep(s)
 
     fun parseAttachments(raw: String): List<Attachment> =
         runCatching { json.decodeFromString<List<Attachment>>(raw) }.getOrDefault(emptyList())

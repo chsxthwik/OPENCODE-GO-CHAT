@@ -14,8 +14,8 @@ android {
         applicationId = "com.github.chsxthwik.gochat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.0.0"
+        versionCode = 5
+        versionName = "1.1.0"
     }
 
     buildTypes {
@@ -64,4 +64,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("app.cash.turbine:turbine:1.2.0")
 }

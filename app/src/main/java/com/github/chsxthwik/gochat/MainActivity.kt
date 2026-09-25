@@ -18,7 +18,6 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,17 +57,17 @@ class MainActivity : ComponentActivity() {
 
                 // ask for the notification permission once, after the first send —
                 // never blocks chatting; replies just skip the banner if denied
-                var askedNotif by rememberSaveable { mutableStateOf(false) }
+                val notifAsked by app.settings.notifAsked.collectAsState(initial = true)
                 val notifPermission = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestPermission(),
                 ) {}
-                LaunchedEffect(ui.messages.any { it.role == Role.USER.wire }) {
-                    if (!askedNotif &&
+                LaunchedEffect(ui.messages.any { it.role == Role.USER.wire }, notifAsked) {
+                    if (!notifAsked &&
                         ui.messages.any { it.role == Role.USER.wire } &&
                         Build.VERSION.SDK_INT >= 33 &&
                         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                     ) {
-                        askedNotif = true
+                        app.settings.markNotifAsked()
                         notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }

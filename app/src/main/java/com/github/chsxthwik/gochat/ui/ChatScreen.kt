@@ -56,6 +56,7 @@ import com.github.chsxthwik.gochat.UiState
 import com.github.chsxthwik.gochat.data.*
 import com.github.chsxthwik.gochat.ui.components.GoIconButton
 import com.github.chsxthwik.gochat.ui.theme.GoColors
+import com.github.chsxthwik.gochat.ui.theme.GoShape
 import com.github.chsxthwik.gochat.ui.theme.GoType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -91,6 +92,8 @@ fun ChatScreen(
     var editing by remember { mutableStateOf<MessageEntity?>(null) }
     var editText by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
+    var promptDialog by remember { mutableStateOf(false) }
+    var promptText by remember { mutableStateOf("") }
     var chatSearch by remember { mutableStateOf<String?>(null) }
     var matchPos by remember { mutableIntStateOf(0) }
     val searchFocus = remember { FocusRequester() }
@@ -241,6 +244,15 @@ fun ChatScreen(
             }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 DropdownMenuItem(
+                    text = { Text("Chat instructions") },
+                    leadingIcon = { Icon(Icons.Default.Edit, null) },
+                    trailingIcon = {
+                        if (conv?.systemPrompt?.isNotBlank() == true)
+                            Text("set", style = GoType.Caption.copy(color = GoColors.Accent))
+                    },
+                    onClick = { menuOpen = false; promptText = conv?.systemPrompt.orEmpty(); promptDialog = true },
+                )
+                DropdownMenuItem(
                     text = { Text("Export chat") },
                     leadingIcon = { Icon(Icons.Default.Share, null) },
                     onClick = {
@@ -260,6 +272,45 @@ fun ChatScreen(
                     leadingIcon = { Icon(Icons.Default.Settings, null) },
                     onClick = { menuOpen = false; onOpenSettings() },
                 )
+            }
+        }
+
+        if (promptDialog) {
+            BasicAlertDialog(onDismissRequest = { promptDialog = false }) {
+                Surface(
+                    shape = RoundedCornerShape(GoShape.M), color = GoColors.Surface,
+                    tonalElevation = 2.dp,
+                ) {
+                    Column(Modifier.padding(20.dp)) {
+                        Text("Chat instructions", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Overrides the app instructions for this chat only.",
+                            style = GoType.Caption.copy(color = GoColors.TextDim),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = promptText,
+                            onValueChange = { promptText = it },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+                            placeholder = { Text("e.g. Reply in terse, senior-engineer tone. No filler.", style = GoType.BodyDim.copy(color = GoColors.TextFaint)) },
+                            textStyle = GoType.Body.copy(color = GoColors.Text),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoColors.Accent.copy(alpha = 0.5f),
+                                unfocusedBorderColor = GoColors.Line,
+                            ),
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { promptDialog = false }) { Text("Cancel") }
+                            if (conv?.systemPrompt?.isNotBlank() == true) {
+                                TextButton(onClick = { vm.setChatSystemPrompt(""); promptDialog = false }) { Text("Clear", color = GoColors.Error) }
+                            }
+                            TextButton(onClick = { vm.setChatSystemPrompt(promptText); promptDialog = false }) { Text("Save") }
+                        }
+                    }
+                }
             }
         }
 

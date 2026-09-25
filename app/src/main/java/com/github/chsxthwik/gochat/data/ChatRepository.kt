@@ -41,6 +41,8 @@ class ChatRepository(private val db: ChatDatabase) {
     suspend fun setPinned(id: String, pinned: Boolean) = dao.setPinned(id, if (pinned) 1 else 0)
     suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, if (archived) 1 else 0)
     suspend fun setDraft(id: String, draft: String) = dao.setDraft(id, draft)
+
+    suspend fun setConversationPrompt(id: String, prompt: String) = dao.setConversationPrompt(id, prompt)
     suspend fun conversationsMatching(query: String): List<String> =
         dao.conversationsMatching("%" + query.replace("%", "").replace("_", "") + "%")
 

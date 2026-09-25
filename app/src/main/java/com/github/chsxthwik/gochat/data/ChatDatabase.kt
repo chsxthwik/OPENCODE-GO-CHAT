@@ -25,6 +25,7 @@ data class Conversation(
     val pinned: Int = 0,
     val archived: Int = 0,
     val draft: String = "",
+    val systemPrompt: String = "",
 )
 
 @Entity(
@@ -58,6 +59,9 @@ interface ChatDao {
 
     @Query("UPDATE conversations SET draft = :draft WHERE id = :id")
     suspend fun setDraft(id: String, draft: String)
+
+    @Query("UPDATE conversations SET systemPrompt = :prompt WHERE id = :id")
+    suspend fun setConversationPrompt(id: String, prompt: String)
 
     @Query("SELECT DISTINCT conversationId FROM messages WHERE content LIKE :pattern")
     suspend fun conversationsMatching(pattern: String): List<String>
@@ -172,9 +176,15 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE conversations ADD COLUMN systemPrompt TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 @Database(
     entities = [Conversation::class, MessageEntity::class, AgentTask::class, AgentStep::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class ChatDatabase : RoomDatabase() {
@@ -189,7 +199,7 @@ abstract class ChatDatabase : RoomDatabase() {
                     context.applicationContext,
                     ChatDatabase::class.java,
                     "gochat.db"
-                ).addMigrations(MIGRATION_1_2).fallbackToDestructiveMigration().build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).fallbackToDestructiveMigration().build().also { instance = it }
             }
     }
 }

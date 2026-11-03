@@ -8,10 +8,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * GoChat design tokens. Dark-first: the app is a developer terminal product —
- * one carefully tuned palette beats two half-tuned schemes. Every color,
- * type style, spacing step, and corner radius used by the UI lives here so
- * screens stay consistent and restyling touches a single file.
+ * GoChat design tokens. Dark-only palette. Colors, type styles, spacing and
+ * corner radii used by the UI are defined here.
  */
 object GoColors {
     // surfaces — deepest to most raised

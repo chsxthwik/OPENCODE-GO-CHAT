@@ -4,6 +4,7 @@ import com.github.chsxthwik.gochat.data.ApiProtocol
 import com.github.chsxthwik.gochat.data.GoApi
 import com.github.chsxthwik.gochat.data.GoError
 import com.github.chsxthwik.gochat.data.WireMessage
+import com.github.chsxthwik.gochat.data.normalizeGatewayBase
 import com.github.chsxthwik.gochat.data.requestBody
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -94,5 +95,19 @@ class GoApiTest {
         val src = msgs[0].jsonObject["content"]!!.jsonArray[1].jsonObject["source"]!!.jsonObject
         assertEquals("image/jpeg", src["media_type"]!!.jsonPrimitive.content)
         assertEquals("BBBB", src["data"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `gateway base implies https and strips slashes`() {
+        assertEquals("https://gw.example.com/v1", normalizeGatewayBase("  gw.example.com/v1// "))
+        assertEquals(null, normalizeGatewayBase(""))
+    }
+
+    @Test
+    fun `gateway base allows http only on local hosts`() {
+        assertEquals("http://192.168.1.5:8080/v1", normalizeGatewayBase("http://192.168.1.5:8080/v1/"))
+        assertEquals("http://localhost:3000", normalizeGatewayBase("http://localhost:3000"))
+        assertEquals(null, normalizeGatewayBase("http://gw.example.com/v1"))
+        assertEquals(null, normalizeGatewayBase("http://172.32.0.1"))
     }
 }

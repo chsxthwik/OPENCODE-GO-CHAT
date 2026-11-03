@@ -47,13 +47,28 @@ data class WireMessage(
     val images: List<String> = emptyList(), // base64 data URLs
 )
 
-/** Normalize a user-entered gateway URL: https implied, trailing slashes stripped. */
+/** True for hosts where plain http is acceptable: loopback, LAN ranges and *.local names. */
+internal fun isLocalHost(host: String): Boolean {
+    val h = host.lowercase()
+    if (h == "localhost" || h.endsWith(".local") || h.endsWith(".localhost")) return true
+    val parts = h.split('.')
+    val o = parts.mapNotNull { it.toIntOrNull() }
+    if (parts.size != 4 || o.size != 4 || o.any { it !in 0..255 }) return false
+    return o[0] == 127 || o[0] == 10 || (o[0] == 192 && o[1] == 168) || (o[0] == 172 && o[1] in 16..31)
+}
+
+/**
+ * Normalize a user-entered gateway URL: https implied, trailing slashes stripped.
+ * Plain http is refused for public hosts so the API key never travels in clear text.
+ */
 fun normalizeGatewayBase(raw: String): String? {
     var u = raw.trim()
     if (u.isEmpty()) return null
-    if (!u.startsWith("http://") && !u.startsWith("https://")) u = "https://$u"
+    if (!u.startsWith("http://", ignoreCase = true) && !u.startsWith("https://", ignoreCase = true)) u = "https://$u"
     u = u.trimEnd('/')
-    return if (u.toHttpUrlOrNull() != null) u else null
+    val url = u.toHttpUrlOrNull() ?: return null
+    if (!url.isHttps && !isLocalHost(url.host)) return null
+    return u
 }
 
 class GoApi {
@@ -72,7 +87,7 @@ class GoApi {
             .url("$base$path")
             .header("Authorization", "Bearer $apiKey")
             .header("x-opencode-session", sessionId)
-            .header("User-Agent", "GoChat-Android/0.3")
+            .header("User-Agent", "GoChat-Android")
             .header("Accept", "application/json")
 
     suspend fun listModels(apiKey: String, sessionId: String): List<GoModel> =

@@ -38,7 +38,7 @@ internal fun GoApi.streamOnce(
         .url("$base${pathFor(proto)}")
         .header("Authorization", "Bearer $apiKey")
         .header("x-opencode-session", sessionId)
-        .header("User-Agent", "GoChat-Android/0.3")
+        .header("User-Agent", "GoChat-Android")
         .header("Accept", "text/event-stream")
         .post(body)
         .build()

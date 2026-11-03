@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="GoChat banner">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b2e"/>
+    </linearGradient>
+    <linearGradient id="ac" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#58a6ff"/>
+      <stop offset="1" stop-color="#a371f7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" rx="16" fill="url(#bg)"/>
+  <rect x="90" y="82" width="136" height="136" rx="30" fill="none" stroke="url(#ac)" stroke-width="6"/>
+  <text x="158" y="170" text-anchor="middle" font-family="monospace" font-size="58" font-weight="700" fill="url(#ac)">&gt;_</text>
+  <text x="270" y="152" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="76" font-weight="700" fill="#f0f6fc">GoChat</text>
+  <text x="272" y="198" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="28" fill="#8b949e">A native Android client for OpenCode Go. Your key, your device.</text>
+  <rect x="270" y="222" width="300" height="4" rx="2" fill="url(#ac)"/>
+</svg>
